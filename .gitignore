@@ -1,0 +1,7 @@
+node_modules/
+# ビルド結果（coordinate-notation/dist/ はビルドに使うので含める）
+static/data/
+# 国境データの元ファイル（約 150 MB、GitHub の上限を超える）。README の手順で入手する
+country_bound.geojson
+# ローカルの Claude Code 設定
+.claude/settings.local.json

@@ -1,0 +1,20 @@
+{
+  "name": "automap",
+  "version": "0.1.0",
+  "private": true,
+  "description": "ページ内の座標表記（緯度経度 / MGRS / UTM / GeoHash / WKT）を検出し、地図画像をホバー表示する Chrome 拡張",
+  "license": "MIT",
+  "type": "module",
+  "scripts": {
+    "build:data": "node --max-old-space-size=8192 scripts/build-data.mjs",
+    "build": "node scripts/build.mjs",
+    "watch": "node scripts/build.mjs --watch",
+    "test": "node --test test/*.test.js"
+  },
+  "devDependencies": {
+    "esbuild": "^0.24.0"
+  },
+  "dependencies": {
+    "ol": "^10.2.1"
+  }
+}

@@ -1,0 +1,34 @@
+{
+  "manifest_version": 3,
+  "name": "AutoMap",
+  "version": "0.1.0",
+  "description": "ページ内の座標（緯度経度・MGRS・UTM・GeoHash・WKT）をハイライトし、ホバーで地図画像、クリックで地図を表示します。",
+  "minimum_chrome_version": "116",
+  "permissions": [
+    "storage",
+    "sidePanel"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "http://*/*",
+        "https://*/*",
+        "file:///*"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "options_page": "options.html",
+  "action": {
+    "default_title": "AutoMap: 検出した位置の一覧"
+  },
+  "side_panel": {
+    "default_path": "sidepanel.html"
+  }
+}

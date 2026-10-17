@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AutoMap</title>
+  <link rel="stylesheet" href="map.css">
+  <style>
+    :root { color-scheme: light; font: 13px/1.5 system-ui, -apple-system, "Segoe UI", "Hiragino Sans", "Meiryo", sans-serif; color: #1f2328; }
+    html, body { margin: 0; height: 100%; overflow: hidden; background: #e8eef2; user-select: none; }
+    .panel { user-select: text; }
+    #map { position: fixed; inset: 0; }
+    /* OpenLayers の拡大縮小ボタンは右上、パネルは左上 */
+    #map .ol-zoom { left: auto; right: 12px; top: 12px; background: none; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+    #map .ol-zoom button { width: 34px; height: 34px; margin: 0; border-radius: 8px; border: 1px solid rgba(0,0,0,.2); background: #fff;
+                           color: #1f2328; font-size: 20px; box-shadow: 0 2px 8px rgba(0,0,0,.12); }
+    #map .ol-zoom button:hover { background: #f3f4f6; }
+    #map .ol-scale-line { left: auto; right: 12px; bottom: 36px; }
+    #map .ol-attribution { right: 12px; bottom: 8px; border-radius: 6px; max-width: calc(100% - 340px); }
+    #map .ol-attribution ul { font-size: 11px; color: #424a53; text-shadow: none; }
+    #map .ol-attribution a { color: #0969da; }
+    .panel { position: fixed; top: 12px; left: 12px; max-width: min(360px, calc(100vw - 24px)); background: rgba(255,255,255,.95);
+             border: 1px solid rgba(0,0,0,.15); border-radius: 10px; box-shadow: 0 4px 18px rgba(0,0,0,.15); padding: 10px 12px; }
+    .panel h1 { font-size: 14px; margin: 0 0 4px; word-break: break-all; }
+    .panel .kind { color: #57606a; font-size: 12px; }
+    .panel dl { margin: 8px 0 0; display: grid; grid-template-columns: auto 1fr; gap: 2px 10px; }
+    .panel dt { color: #57606a; }
+    .panel dd { margin: 0; font-variant-numeric: tabular-nums; word-break: break-all; }
+    .panel { max-height: calc(100vh - 80px); overflow: auto; }
+    .controls { position: fixed; right: 12px; top: 96px; display: flex; flex-direction: column; gap: 6px; }
+    .controls button { width: 34px; height: 34px; border-radius: 8px; border: 1px solid rgba(0,0,0,.2); background: #fff; font-size: 18px;
+                       cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,.12); }
+    .controls button:hover { background: #f3f4f6; }
+    .status { position: fixed; left: 12px; bottom: 12px; background: rgba(255,255,255,.9); border-radius: 6px; padding: 3px 8px;
+              font-size: 12px; color: #57606a; font-variant-numeric: tabular-nums; }
+    .items { list-style: none; margin: 8px 0 0; padding: 0; max-height: 40vh; overflow: auto; border-top: 1px solid rgba(0,0,0,.1); }
+    .items li { padding: 5px 4px; border-bottom: 1px solid rgba(0,0,0,.06); cursor: pointer; word-break: break-all; }
+    .items li:hover { background: #f3f4f6; }
+    .items li.selected { background: #fdecea; }
+    .items .sub { color: #57606a; font-size: 12px; }
+    .label { position: fixed; z-index: 5; pointer-events: none; background: rgba(31,35,40,.9); color: #fff; font-size: 12px;
+             padding: 3px 8px; border-radius: 6px; max-width: 320px; word-break: break-all; }
+    .links { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+    .links a { font-size: 12px; padding: 3px 9px; border-radius: 6px; border: 1px solid #d0d7de; background: #fff; color: #0969da; text-decoration: none; }
+    .links a:hover { background: #f3f4f6; }
+    .links a[hidden] { display: none; }
+  </style>
+</head>
+<body>
+  <div id="map"></div>
+  <div class="panel">
+    <h1 id="title"></h1>
+    <div class="kind" id="kind"></div>
+    <dl id="info"></dl>
+    <div class="links">
+      <a id="viewer" target="_blank" rel="noopener" hidden>画像ビューアで開く</a>
+      <a id="viewerAll" target="_blank" rel="noopener" hidden>すべてを画像ビューアで開く</a>
+    </div>
+    <ul class="items" id="items" hidden></ul>
+  </div>
+  <div class="controls">
+    <button id="reset" title="位置に戻る">⌖</button>
+  </div>
+  <div class="label" id="label" hidden></div>
+  <div class="status" id="status">読み込み中…</div>
+  <script type="module" src="map.js"></script>
+</body>
+</html>

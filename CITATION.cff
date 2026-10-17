@@ -1,0 +1,35 @@
+cff-version: 1.2.0
+message: "このソフトウェアを引用する場合は、以下の情報を使ってください。国境データを使う場合は、references の World Bank Official Boundaries も併せて表記してください。"
+title: "AutoMap"
+abstract: "ページ内の座標表記（緯度経度 / MGRS / UTM / GeoHash / WKT）を検出し、地図画像のホバー表示と動かせる地図を提供するブラウザ拡張機能。"
+type: software
+authors:
+  - alias: "Tosei-sudo"
+version: 0.1.0
+license: MIT
+keywords:
+  - browser-extension
+  - coordinates
+  - geocoding
+  - MGRS
+  - UTM
+  - GeoHash
+  - WKT
+references:
+  - type: data
+    title: "World Bank Official Boundaries"
+    authors:
+      - name: "The World Bank"
+    url: "https://datacatalog.worldbank.org/search/dataset/0038272"
+    license: CC-BY-4.0
+  - type: software
+    title: "OpenLayers"
+    authors:
+      - name: "OpenLayers Contributors"
+    url: "https://openlayers.org/"
+    license: BSD-2-Clause
+  - type: software
+    title: "coordinate-notation"
+    authors:
+      - alias: "Tosei-sudo"
+    license: MIT

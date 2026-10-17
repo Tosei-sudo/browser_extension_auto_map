@@ -1,0 +1,37 @@
+{
+  "colors": {
+    "highlightCountry": "#FFFFFF",
+    "otherCountry": "#BBBBBB",
+    "ocean": "#A8D8F0",
+    "border": "#7A7A7A",
+    "marker": "#E53935",
+    "markerStroke": "#FFFFFF",
+    "geometryStroke": "#E53935",
+    "geometryFill": "rgba(229, 57, 53, 0.25)",
+    "textHighlight": "rgba(255, 213, 79, 0.45)"
+  },
+  "map": {
+    "borderWidth": 0.6,
+    "markerRadius": 6,
+    "geometryWidth": 2.5
+  },
+  "image": {
+    "width": 320,
+    "height": 200,
+    "padding": 0.12,
+    "minSpanDeg": 2,
+    "oceanSpanDeg": 40,
+    "maxCountrySpanDeg": 60
+  },
+  "detect": {
+    "latlon": true,
+    "plainDecimal": true,
+    "minDecimals": 3,
+    "mgrs": true,
+    "utm": true,
+    "geohash": true,
+    "wkt": true,
+    "splitPairs": true,
+    "pairMaxGap": 40
+  }
+}
