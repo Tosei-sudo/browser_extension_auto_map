@@ -79,6 +79,8 @@ npm run build        # dist/ に拡張機能一式を作る
 npm test             # 検出のテスト
 ```
 
+GitHub Actions（`.github/workflows/build.yml`）がプルリクエストと main へのマージのたびにテストとビルドを行います。main でビルドした `dist/` は、その実行結果の Artifacts（`automap-dist`）からダウンロードできます。
+
 Chrome で `chrome://extensions` を開き、「デベロッパー モード」をオンにして「パッケージ化されていない拡張機能を読み込む」で `dist/` を選びます。
 ローカルファイル（`file://`）でも使う場合は、拡張機能の詳細で「ファイルの URL へのアクセスを許可する」をオンにしてください。
 

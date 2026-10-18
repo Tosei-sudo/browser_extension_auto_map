@@ -1,0 +1,32 @@
+# テストと拡張機能のビルド。main へのマージ（push）でビルドした dist/ を成果物（Artifacts）として残す。
+name: Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      # 国境データの元ファイル（約 150 MB）はリポジトリにないので、コミット済みの dist/data/ を使う
+      - name: Prepare border data
+        run: mkdir -p static/data && cp dist/data/* static/data/
+      - run: npm run build
+      - uses: actions/upload-artifact@v4
+        if: github.event_name != 'pull_request'
+        with:
+          name: automap-dist
+          path: dist/
