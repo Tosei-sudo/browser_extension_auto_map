@@ -23,7 +23,7 @@ import { expandToMinSpan, locate } from './lib/locate.js';
 import { cellSizeText } from './lib/geohash.js';
 import { geometryBbox, imageViewerUrl } from './lib/wkt.js';
 
-const KIND_LABEL = { latlon: '緯度経度', mgrs: 'MGRS', utm: 'UTM', geohash: 'GeoHash', wkt: 'WKT' };
+const KIND_LABEL = { latlon: '緯度経度', mgrs: 'MGRS', utm: 'UTM', geohash: 'GeoHash', wkt: 'WKT', place: '地名' };
 // 赤道での 1 度の長さ（m）。表示解像度（m/px）と間引き許容誤差（度）の換算に使う
 const METERS_PER_DEGREE = 111319.49;
 const R = 6378137;
@@ -151,6 +151,7 @@ const union = (a, b) => [Math.min(a[0], b[0]), Math.min(a[1], b[1]), Math.max(a[
 function detailRows(item, countries) {
   const g = item.geometry;
   const rows = [];
+  if (item.name) rows.push(['地名', item.name]);
   // GeoHash のセルは中心の座標を出す
   const p = g.type === 'Point' ? g.coordinates : g.center;
   if (p) {
