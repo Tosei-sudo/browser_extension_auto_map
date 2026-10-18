@@ -47,6 +47,27 @@ UTM の `S` は「南半球」と「緯度帯 S（北緯 32〜40 度）」のど
 
 座標の解析・変換には `coordinate-notation/` を使っています。このライブラリが対象にしていない GeoHash と POINT 以外の WKT は `src/lib/geohash.js`、`src/lib/wkt.js` で読みます。
 
+## 地名（ArcGIS フィーチャーサービス）
+
+設定の「地名」で ArcGIS のフィーチャーサービス（レイヤー）を指定すると、そこから取得した地名もページ内で検出します（既定はオフ）。
+
+- 地名は前もってまとめて取得し、拡張機能のローカルストレージにキャッシュします。ページを開くたびにサービスへ問い合わせることはありません。
+- 取得は標準の `query` エンドポイントを `resultOffset` / `resultRecordCount` でページ送りして行います（座標は `outSR=4326`）。
+- 設定画面の「保存して地名データを取得」で取得します。初回はサービスのサイトへのアクセス許可を求めます。キャッシュが有効期間を過ぎるか、URL・条件・属性の設定を変えると、次にページを開いたときに自動で取り直します（失敗したときは 1 時間空けて再試行）。
+- 照合は名前（と読み）の完全一致で、同じ位置からは最も長い名前を採ります。英数字の名前は単語の一部では検出しません。同じ名前が複数あるときは最初の 1 件の位置を使います。
+- 位置は緯度・経度の属性を指定すればその値を、空ならジオメトリ（点以外は外接矩形の中心）を使います。
+
+| キー | 内容 | 既定値 |
+| --- | --- | --- |
+| `gazetteer.enabled` | 地名を検出する | `false` |
+| `gazetteer.url` | レイヤーの URL（`…/FeatureServer/0` など。`/query` は付けても付けなくてもよい） | 空 |
+| `gazetteer.where` | 取得する条件（where 句） | `1=1` |
+| `gazetteer.nameField` / `readingField` | 名前・読みの属性（読みは任意） | `NAME` / 空 |
+| `gazetteer.lonField` / `latField` | 経度・緯度の属性（空ならジオメトリ） | 空 |
+| `gazetteer.minLength` | 検出する名前の最小文字数 | 2 |
+| `gazetteer.maxAgeHours` | キャッシュの有効期間（時間、0 は無期限） | 168 |
+| `gazetteer.pageSize` / `maxFeatures` | 1 回の要求の件数 / 取得する最大件数 | 1000 / 100000 |
+
 ## 使い方
 
 国境データ `country_bound.geojson`（約 150 MB）は GitHub のファイルサイズ上限を超えるためリポジトリに含めていません。[World Bank Official Boundaries](https://datacatalog.worldbank.org/search/dataset/0038272) から国（Admin 0）の境界の GeoJSON をダウンロードし、`country_bound.geojson` という名前でこのフォルダ直下に置いてください。
@@ -107,6 +128,8 @@ src/lib/detect.js   文中の位置記述の検出
 src/lib/locate.js   ハイライトする国と表示範囲の決定
 src/lib/render.js   ホバー画像・設定画面プレビューの描画
 src/lib/geodata.js  国境データの読み込みと点の国判定
+src/lib/arcgis.js   ArcGIS フィーチャーサービスからの地名の取得
+src/lib/gazetteer.js キャッシュした地名による文中の地名の検出
 ```
 
 ## ライセンス

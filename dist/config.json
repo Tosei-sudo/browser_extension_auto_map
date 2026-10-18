@@ -33,5 +33,18 @@
     "wkt": true,
     "splitPairs": true,
     "pairMaxGap": 40
+  },
+  "gazetteer": {
+    "enabled": false,
+    "url": "",
+    "where": "1=1",
+    "nameField": "NAME",
+    "readingField": "",
+    "lonField": "",
+    "latField": "",
+    "minLength": 2,
+    "maxAgeHours": 168,
+    "pageSize": 1000,
+    "maxFeatures": 100000
   }
 }

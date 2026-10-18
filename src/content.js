@@ -7,11 +7,13 @@
  * 書き換えても壊れないようにするためで、変化は MutationObserver で拾ってその段落だけ調べ直す。
  */
 import { formatDms, formatLatLon, formatMgrs } from '../coordinate-notation/dist/cdn/coordinate-notation.min.js';
+import { sourceKey } from './lib/arcgis.js';
 import { axisFromContext, findLoneAngles, findLocations, pairLoneAngles } from './lib/detect.js';
+import { ENTRIES_KEY, buildMatcher, findPlaceNames } from './lib/gazetteer.js';
 import { cellSizeText } from './lib/geohash.js';
 import { vertices } from './lib/wkt.js';
 
-const KIND_LABEL = { latlon: '緯度経度', mgrs: 'MGRS', utm: 'UTM', geohash: 'GeoHash', wkt: 'WKT' };
+const KIND_LABEL = { latlon: '緯度経度', mgrs: 'MGRS', utm: 'UTM', geohash: 'GeoHash', wkt: 'WKT', place: '地名' };
 // 中身を調べない要素（スクリプト、入力欄など）
 const SKIP = new Set(['SCRIPT', 'STYLE', 'NOSCRIPT', 'TEXTAREA', 'INPUT', 'SELECT', 'OPTION', 'TEMPLATE', 'IFRAME', 'CANVAS', 'SVG', 'MATH']);
 // 文字が続いているとみなす要素。これ以外（div、p、td など）を段落とし、その境目で文字列を区切る
@@ -19,11 +21,12 @@ const INLINE = new Set([
   'A', 'ABBR', 'B', 'BDI', 'BDO', 'CITE', 'CODE', 'DATA', 'DEL', 'DFN', 'EM', 'FONT', 'I', 'INS', 'KBD', 'LABEL', 'MARK',
   'NOBR', 'Q', 'RP', 'RT', 'RUBY', 'S', 'SAMP', 'SMALL', 'SPAN', 'STRONG', 'SUB', 'SUP', 'TIME', 'TT', 'U', 'VAR', 'WBR',
 ]);
-// 位置の記述はどれも数字を含む（全角数字も）
+// 座標の記述はどれも数字を含む（全角数字も）。地名は数字がなくても探す
 const HAS_DIGIT = /[0-9０-９]/;
 const HL = 'automap';
 
 let config = null;
+let places = null; // 地名の照合用の索引（gazetteer.js の buildMatcher）
 const send = (msg) => chrome.runtime.sendMessage(msg);
 
 // ---- 段落単位の検出 ----
@@ -84,7 +87,7 @@ function makeRange(segs, start, end) {
 }
 
 let nextId = 1;
-const newLoc = (text, kind, geometry, ranges) => ({ id: nextId++, text, kind, geometry, ranges });
+const newLoc = (text, kind, geometry, ranges, name) => ({ id: nextId++, text, kind, geometry, ranges, name });
 
 /** 段落 → { full: 段落内で完結する検出結果, lones: 緯度・経度の片方だけの記述 } */
 const blocks = new Map();
@@ -95,13 +98,16 @@ function scanBlock(block) {
   blocks.delete(block);
   if (!block.isConnected || isSkipped(block)) return;
   const { text, segs } = blockText(block);
-  if (text.length < 4 || !HAS_DIGIT.test(text)) return;
-  const found = findLocations(text, config.detect);
+  const hasDigit = text.length >= 4 && HAS_DIGIT.test(text);
+  if (!hasDigit && !places) return;
+  const found = hasDigit ? findLocations(text, config.detect) : [];
+  if (places) found.push(...findPlaceNames(text, places, found));
+  found.sort((a, b) => a.start - b.start);
   const full = [];
   for (const f of found) {
     const range = makeRange(segs, f.start, f.end);
     if (!range) continue;
-    const loc = newLoc(f.text, f.kind, f.geometry, [range]);
+    const loc = newLoc(f.text, f.kind, f.geometry, [range], f.name);
     if (previous.has(f.text)) {
       loc.id = previous.get(f.text);
       previous.delete(f.text);
@@ -109,7 +115,7 @@ function scanBlock(block) {
     full.push(loc);
   }
   const lones = [];
-  for (const a of findLoneAngles(text, config.detect, found)) {
+  for (const a of hasDigit ? findLoneAngles(text, config.detect, found) : []) {
     const range = makeRange(segs, a.start, a.end);
     if (range) lones.push({ ...a, range, uid: nextId++ });
   }
@@ -341,8 +347,12 @@ function createTooltip() {
   };
 }
 
+const escapeHtml = (s) => s.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+
 function describeCoord(loc) {
   const g = loc.geometry;
+  // 地名は外部のサービスから取得した文字列なので、エスケープしてから入れる
+  if (loc.kind === 'place') return [`地名 ${escapeHtml(loc.name)}`, formatLatLon(g.coordinates), formatDms(g.coordinates)].join('<br>');
   if (g.center) {
     return [formatLatLon(g.center), formatDms(g.center), `GeoHash セル ${cellSizeText(g)}`].join('<br>');
   }
@@ -461,7 +471,7 @@ function bindEvents() {
 // ---- サイドパネルの一覧とのやりとり ----
 
 const liveLocs = () => allLocs.filter((l) => l.ranges.every(alive));
-const toItem = (loc) => ({ id: loc.id, text: loc.text, kind: loc.kind, geometry: loc.geometry });
+const toItem = (loc) => ({ id: loc.id, text: loc.text, kind: loc.kind, geometry: loc.geometry, name: loc.name });
 
 let notifyTimer = 0;
 let lastCount = -1;
@@ -512,10 +522,33 @@ function injectStyle() {
   (document.head ?? document.documentElement).append(style);
 }
 
+// ---- 地名データ ----
+
+/** キャッシュした地名を読む。今の設定（URL・属性）で取得したものだけを使う。 */
+async function loadPlaces() {
+  const s = config.gazetteer;
+  if (!s.enabled || !s.url.trim()) return null;
+  const { [ENTRIES_KEY]: cache } = await chrome.storage.local.get(ENTRIES_KEY);
+  return cache?.source === sourceKey(s) ? buildMatcher(cache.entries, { minLength: s.minLength }) : null;
+}
+
+function watchPlaces() {
+  if (!config.gazetteer.enabled) return;
+  // キャッシュがない・期限切れなら取り直してもらう。取り直したら storage の変化で読み直す
+  send({ type: 'ensureGazetteer' }).catch(() => {});
+  chrome.storage.onChanged.addListener(async (changes, area) => {
+    if (area !== 'local' || !(ENTRIES_KEY in changes)) return;
+    places = await loadPlaces();
+    enqueue(blocksIn(document.body));
+  });
+}
+
 async function main() {
   if (!document.body || !globalThis.CSS?.highlights) return;
   config = await send({ type: 'getConfig' });
   if (!config || config.error) return;
+  places = await loadPlaces().catch(() => null);
+  watchPlaces();
   injectStyle();
   bindEvents();
   enqueue(blocksIn(document.body));

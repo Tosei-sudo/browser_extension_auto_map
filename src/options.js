@@ -1,5 +1,6 @@
 /** 設定画面。config.json の既定値との差分だけを chrome.storage.sync に保存する。 */
 import { STORAGE_KEY, loadDefaults, merge } from './lib/config.js';
+import { META_KEY } from './lib/gazetteer.js';
 import { loadGeoData } from './lib/geodata.js';
 import { locate } from './lib/locate.js';
 import { drawMap, fitBounds } from './lib/render.js';
@@ -39,6 +40,20 @@ const LABELS = {
     splitPairs: '緯度と経度が別々の要素にあるものも組にする',
     pairMaxGap: '上記で組にする最大の間隔（文字数）',
   },
+  gazetteer: {
+    _: '地名（ArcGIS フィーチャーサービス）',
+    enabled: '地名を検出する',
+    url: 'レイヤーの URL（…/FeatureServer/0）',
+    where: '取得する条件（where 句）',
+    nameField: '名前の属性',
+    readingField: '読みの属性（任意。読みでも検出する）',
+    lonField: '経度の属性（任意。空ならジオメトリ）',
+    latField: '緯度の属性（任意。空ならジオメトリ）',
+    minLength: '検出する名前の最小文字数',
+    maxAgeHours: 'キャッシュの有効期間（時間、0 は無期限）',
+    pageSize: '1 回の要求で取得する件数',
+    maxFeatures: '取得する最大件数',
+  },
 };
 
 // 色の入力欄の右にあるカラーピッカーは #RRGGBB だけを扱えるので、それ以外の書き方では使わない
@@ -72,6 +87,10 @@ function buildForm() {
         const input = Object.assign(document.createElement('input'), { type: 'number', id, value, step: 'any' });
         input.addEventListener('input', () => input.value !== '' && update(group, key, Number(input.value)));
         row.append(input);
+      } else if (group === 'gazetteer') {
+        const input = Object.assign(document.createElement('input'), { type: 'text', id, value, className: 'wide' });
+        input.addEventListener('input', () => update(group, key, input.value));
+        row.append(input);
       } else {
         const wrap = document.createElement('div');
         wrap.className = 'color';
@@ -92,8 +111,53 @@ function buildForm() {
       }
       section.append(row);
     }
+    if (group === 'gazetteer') section.append(gazetteerActions());
     form.append(section);
   }
+  showGazetteerStatus();
+}
+
+// ---- 地名データの取得 ----
+
+function gazetteerActions() {
+  const row = document.createElement('div');
+  row.className = 'actions';
+  const button = Object.assign(document.createElement('button'), { type: 'button', textContent: '保存して地名データを取得' });
+  const status = Object.assign(document.createElement('span'), { id: 'gazetteerStatus' });
+  button.onclick = async () => {
+    const s = current.gazetteer;
+    let origin;
+    try {
+      origin = new URL(s.url.trim()).origin;
+    } catch {
+      status.textContent = 'URL が正しくありません';
+      return;
+    }
+    // サービスのサイトへのアクセスを許可してもらう（CORS に対応していないサービスでも取得できるように）
+    if (!(await chrome.permissions.request({ origins: [`${origin}/*`] }))) {
+      status.textContent = 'サイトへのアクセスが許可されませんでした';
+      return;
+    }
+    await save();
+    button.disabled = true;
+    status.textContent = '取得中…';
+    const res = await chrome.runtime.sendMessage({ type: 'refreshGazetteer', settings: s }).catch((e) => ({ error: String(e) }));
+    button.disabled = false;
+    if (!res?.ok) status.textContent = `取得できませんでした: ${res?.error ?? ''}`;
+    else showGazetteerStatus();
+  };
+  row.append(button, status);
+  return row;
+}
+
+async function showGazetteerStatus() {
+  const status = document.getElementById('gazetteerStatus');
+  const { [META_KEY]: meta } = await chrome.storage.local.get(META_KEY);
+  if (!status || !meta) return;
+  const parts = [];
+  if (meta.fetchedAt) parts.push(`${meta.count} 件（${new Date(meta.fetchedAt).toLocaleString()} に取得）`);
+  if (meta.error) parts.push(`前回の取得に失敗: ${meta.error}`);
+  status.textContent = parts.join('　');
 }
 
 function update(group, key, value) {
@@ -112,6 +176,11 @@ function diff(base, value) {
     } else if (value[k] !== v) out[k] = value[k];
   }
   return out;
+}
+
+async function save() {
+  await chrome.storage.sync.set({ [STORAGE_KEY]: diff(defaults, current) });
+  document.getElementById('saved').textContent = '保存しました（開き直したページから反映されます）';
 }
 
 let data = null;
@@ -141,10 +210,7 @@ async function main() {
   const stored = await chrome.storage.sync.get(STORAGE_KEY);
   current = merge(defaults, stored[STORAGE_KEY]);
   buildForm();
-  document.getElementById('save').onclick = async () => {
-    await chrome.storage.sync.set({ [STORAGE_KEY]: diff(defaults, current) });
-    document.getElementById('saved').textContent = '保存しました（開き直したページから反映されます）';
-  };
+  document.getElementById('save').onclick = save;
   document.getElementById('reset').onclick = async () => {
     await chrome.storage.sync.remove(STORAGE_KEY);
     current = structuredClone(defaults);

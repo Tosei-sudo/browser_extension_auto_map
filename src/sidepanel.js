@@ -6,7 +6,7 @@ import { formatLatLon } from '../coordinate-notation/dist/cdn/coordinate-notatio
 import { cellSizeText } from './lib/geohash.js';
 import { imageViewerUrl, vertices } from './lib/wkt.js';
 
-const KIND_LABEL = { latlon: '緯度経度', mgrs: 'MGRS', utm: 'UTM', geohash: 'GeoHash', wkt: 'WKT' };
+const KIND_LABEL = { latlon: '緯度経度', mgrs: 'MGRS', utm: 'UTM', geohash: 'GeoHash', wkt: 'WKT', place: '地名' };
 
 const el = (id) => document.getElementById(id);
 let tabId = null;

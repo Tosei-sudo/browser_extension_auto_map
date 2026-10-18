@@ -6,7 +6,12 @@
   "minimum_chrome_version": "116",
   "permissions": [
     "storage",
+    "unlimitedStorage",
     "sidePanel"
+  ],
+  "optional_host_permissions": [
+    "https://*/*",
+    "http://*/*"
   ],
   "background": {
     "service_worker": "background.js"
