@@ -9,6 +9,7 @@
     "build:data": "node --max-old-space-size=8192 scripts/build-data.mjs",
     "build": "node scripts/build.mjs",
     "watch": "node scripts/build.mjs --watch",
+    "configure": "node scripts/apply-config.mjs",
     "test": "node --test test/*.test.js"
   },
   "devDependencies": {
