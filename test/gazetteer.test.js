@@ -78,3 +78,9 @@ test('地名がなければ null', () => {
   assert.equal(buildMatcher([]), null);
   assert.deepEqual(findPlaceNames('東京', null), []);
 });
+
+test('全角・半角のゆれをそろえて照合する', () => {
+  const m = buildMatcher([['ABC島', 1, 2], ['１丁目', 3, 4], ['ｶﾞｲﾄﾞ岬', 5, 6]]);
+  const r = findPlaceNames('ＡＢＣ島と1丁目とガイド岬', m);
+  assert.deepEqual(r.map((f) => [f.text, f.name, f.start, f.end]), [['ＡＢＣ島', 'ABC島', 0, 4], ['1丁目', '１丁目', 5, 8], ['ガイド岬', 'ｶﾞｲﾄﾞ岬', 9, 13]]);
+});

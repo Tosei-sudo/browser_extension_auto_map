@@ -31,6 +31,16 @@ const hits = [
   ['35.6812° 139.7671°', TOKYO],
   ['-33.8688, 151.2093 Sydney', [151.2093, -33.8688]],
   ['＝３５．６８１２，１３９．７６７１', TOKYO],
+  // 緯度 4 桁・経度 5 桁の度分
+  ['3541N 13946E', [139.7667, 35.6833], '3541N 13946E'],
+  ['地点 3541 13946 付近', [139.7667, 35.6833], '3541 13946'],
+  ['3541.5, 13946.2', [139.77, 35.6917]],
+  // 全角のゆれ
+  ['３５４１Ｎ　１３９４６Ｅ', [139.7667, 35.6833], '３５４１Ｎ　１３９４６Ｅ'],
+  ['Ｎ３５．６８１２ Ｅ１３９．７６７１', TOKYO],
+  ['３５゜４０′５２″Ｎ １３９゜４６′１″Ｅ', TOKYO],
+  ['ＭＧＲＳ ５４ＳＵＥ８８４３３４９２９０', TOKYO, '５４ＳＵＥ８８４３３４９２９０'],
+  ['ＰＯＩＮＴ（１３９．７６７１　３５．６８１２）', TOKYO, 'ＰＯＩＮＴ（１３９．７６７１　３５．６８１２）'],
 ];
 for (const [text, expected, match] of hits) {
   test(`detects: ${text}`, () => {
@@ -71,6 +81,9 @@ const misses = [
   'score 100.123, 200.456',
   'temperature 35.5°C',
   'deadbeefcafe',
+  '2024 10000円',
+  '9100 13946',
+  '3561 13946',
 ];
 for (const text of misses) {
   test(`ignores: ${text}`, () => assert.deepEqual(findLocations(text), []));
@@ -97,4 +110,12 @@ for (const [name, items, expected] of pairs) {
 test('does not pair unlabeled decimals', () => assert.deepEqual(pairLoneAngles([lone('35.681236', Infinity), lone('139.767125', 2)]), []));
 test('does not pair values far apart', () => assert.deepEqual(pairLoneAngles([lone('138度55分59秒', Infinity), lone('35度58分40秒', 100)]), []));
 test('does not pair two latitudes', () => assert.deepEqual(pairLoneAngles([lone('北緯35度41分14秒', Infinity), lone('北緯36度41分14秒', 0)]), []));
+test('pairs full-width values in separate cells', () => {
+  const r = pairLoneAngles([lone('北緯３５度４１分１４秒', Infinity), lone('東経１３９度４５分５１秒', 0)]);
+  assert.ok(near(r[0].geometry.coordinates, [139.76417, 35.68722], 1e-4), JSON.stringify(r));
+});
+test('lone angles keep original offsets', () => {
+  const [a] = findLoneAngles('ａ Ｎ３５度４１分', {}, []);
+  assert.deepEqual([a.start, a.end, a.text, a.value], [2, 9, 'Ｎ３５度４１分', 'N35度41分']);
+});
 test('ignores degrees without minutes (temperatures)', () => assert.deepEqual(findLoneAngles('気温35度'), []));

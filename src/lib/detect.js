@@ -4,9 +4,11 @@
  * coordinate-notation の parseCoordinate は「文字列全体が 1 つの座標か」を判定する関数なので、
  * ここでは正規表現で候補の範囲を切り出し、最終的な判定と変換をライブラリに任せる。
  * GeoHash と POINT 以外の WKT はライブラリの対象外なので、それぞれ geohash.js / wkt.js で読む。
+ * 全角の英数字・記号などは normalize.js で半角にそろえてから調べ、見つけた範囲は元の文字列の位置で返す。
  */
 import { parseCoordinate } from '../../coordinate-notation/dist/cdn/coordinate-notation.min.js';
 import { geohashGeometry } from './geohash.js';
+import { normalizeIfNeeded } from './normalize.js';
 import { WKT_START, matchParen, parseWkt } from './wkt.js';
 
 const d = '[0-9０-９]';
@@ -58,6 +60,11 @@ function buildPatterns(minDecimals) {
       kind: 'decimal',
       re: `(?<![\\w.．,，\\-−－])${dec}(?:\\s*[,，、]\\s*|\\s+)${dec}(?![\\w.．])`,
     },
+    // 記号のない度分（緯度 4 桁 DDMM・経度 5 桁 DDDMM、例: 3541 13946）。北緯・東経として読む
+    {
+      kind: 'degmin',
+      re: `(?<![\\w.,\\-−])(\\d{2})(\\d{2}(?:\\.\\d+)?)(?:\\s*[,、]\\s*|\\s+)(\\d{3})(\\d{2}(?:\\.\\d+)?)(?![\\w.%\\u3040-\\u30FF\\u3400-\\u9FFF])`,
+    },
     { kind: 'geohash-bare', re: `(?<![\\w\\-/.#@:=&?%])[0-9b-hjkmnp-z]{6,12}(?![\\w\\-/.@])` },
   ].map((p) => ({ ...p, re: new RegExp(p.re, `g${p.flags ?? ''}`) }));
 }
@@ -93,6 +100,29 @@ function parseUtm(zone, letter, rest) {
   return letter === 'S' ? parse('S') : null;
 }
 
+/** 記号のない度分（DDMM / DDDMM）を読む。分が 60 以上・範囲外なら null。 */
+function parseDegMin(latD, latM, lonD, lonM) {
+  const [a, b, c, e] = [latD, latM, lonD, lonM].map(Number);
+  if (b >= 60 || e >= 60) return null;
+  const lat = a + b / 60;
+  const lon = c + e / 60;
+  return lat <= 90 && lon <= 180 ? [lon, lat] : null;
+}
+
+/** 整えた文字列での位置 → 元の文字列での位置。 */
+const toSource = (map, i) => map[i];
+/** 元の文字列での位置 → 整えた文字列での位置（その位置以降で最初の文字）。 */
+function toNormalized(map, pos) {
+  let lo = 0;
+  let hi = map.length - 1;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if (map[mid] < pos) lo = mid + 1;
+    else hi = mid;
+  }
+  return lo;
+}
+
 let cache = { key: '', patterns: [] };
 
 /**
@@ -100,9 +130,20 @@ let cache = { key: '', patterns: [] };
  * @returns {{start: number, end: number, text: string, kind: string, geometry: object}[]}
  *   geometry は GeoJSON 形式（Point なら coordinates = [lon, lat]）
  */
-export function findLocations(text, options = {}) {
+export function findLocations(source, options = {}) {
+  const norm = normalizeIfNeeded(source);
+  const found = findInNormalized(norm ? norm.text : source, options);
+  if (!norm) return found;
+  return found.map((f) => {
+    const start = toSource(norm.map, f.start);
+    const end = toSource(norm.map, f.end);
+    return { ...f, start, end, text: source.slice(start, end) };
+  });
+}
+
+function findInNormalized(text, options) {
   const opt = {
-    latlon: true, mgrs: true, utm: true, geohash: true, wkt: true, plainDecimal: true, minDecimals: 3,
+    latlon: true, mgrs: true, utm: true, geohash: true, wkt: true, plainDecimal: true, minDecimals: 3, plainDegMin: true,
     ...options,
   };
   const key = String(opt.minDecimals);
@@ -133,7 +174,7 @@ export function findLocations(text, options = {}) {
 
   for (const p of cache.patterns) {
     const enabled = {
-      mgrs: opt.mgrs, utm: opt.utm, latlon: opt.latlon, decimal: opt.plainDecimal && opt.latlon,
+      mgrs: opt.mgrs, utm: opt.utm, latlon: opt.latlon, decimal: opt.plainDecimal && opt.latlon, degmin: opt.plainDegMin && opt.latlon,
       geohash: opt.geohash, 'geohash-bare': opt.geohash,
     }[p.kind];
     if (!enabled) continue;
@@ -146,6 +187,11 @@ export function findLocations(text, options = {}) {
         const hash = p.kind === 'geohash' ? m[1] : m[0];
         if (p.kind === 'geohash-bare' && !plausibleBareGeohash(hash)) continue;
         add(start, end, 'geohash', geohashGeometry(hash));
+        continue;
+      }
+      if (p.kind === 'degmin') {
+        const lonLat = parseDegMin(m[1], m[2], m[3], m[4]);
+        if (lonLat) add(start, end, 'latlon', { type: 'Point', coordinates: lonLat });
         continue;
       }
       const lonLat = p.kind === 'utm' ? parseUtm(m[1], m[2], m[3]) : parseCoordinate(cleanForLibrary(m[0]));
@@ -181,9 +227,21 @@ let loneCache = { key: '', patterns: [] };
 
 /**
  * text 中の単独の角度（緯度か経度の片方）を返す。ranges（findLocations の結果）と重なるものは除く。
- * @returns {{start: number, end: number, text: string, axis: 'lat'|'lon'|null, degrees: number, needsLabel: boolean}[]}
+ * text は元の文字列、value は表記をそろえた文字列（組にするときに読む）。
+ * @returns {{start: number, end: number, text: string, value: string, axis: 'lat'|'lon'|null, degrees: number, needsLabel: boolean}[]}
  */
-export function findLoneAngles(text, options = {}, ranges = []) {
+export function findLoneAngles(source, options = {}, ranges = []) {
+  const norm = normalizeIfNeeded(source);
+  if (!norm) return findLoneInNormalized(source, options, ranges).map((a) => ({ ...a, value: a.text }));
+  const normRanges = ranges.map((r) => ({ start: toNormalized(norm.map, r.start), end: toNormalized(norm.map, r.end) }));
+  return findLoneInNormalized(norm.text, options, normRanges).map((a) => {
+    const start = toSource(norm.map, a.start);
+    const end = toSource(norm.map, a.end);
+    return { ...a, start, end, text: source.slice(start, end), value: a.text };
+  });
+}
+
+function findLoneInNormalized(text, options, ranges) {
   if (options.latlon === false || options.splitPairs === false) return [];
   const minDecimals = Math.max(0, (options.minDecimals ?? 3) | 0);
   if (loneCache.key !== String(minDecimals)) loneCache = { key: String(minDecimals), patterns: buildLonePatterns(minDecimals) };
@@ -242,7 +300,7 @@ export function pairLoneAngles(items, maxGap = 40) {
     } else if (!axisA) axisA = axisB === 'lat' ? 'lon' : 'lat';
     else if (!axisB) axisB = axisA === 'lat' ? 'lon' : 'lat';
     if (axisA === axisB) continue;
-    const part = (it, axis) => `${it.prefix ?? (axis === 'lat' ? '緯度 ' : '経度 ')}${cleanForLibrary(it.text)}`;
+    const part = (it, axis) => `${it.prefix ?? (axis === 'lat' ? '緯度 ' : '経度 ')}${cleanForLibrary(it.value ?? it.text)}`;
     const [lat, lon] = axisA === 'lat' ? [part(a, axisA), part(b, axisB)] : [part(b, axisB), part(a, axisA)];
     const lonLat = parseCoordinate(`${lat}, ${lon}`);
     if (!lonLat) continue;

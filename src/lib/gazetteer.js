@@ -3,7 +3,11 @@
  * 名前と読みの完全一致で、同じ位置からは最も長い名前を採る。
  */
 
+import { normalizeIfNeeded } from './normalize.js';
+
 const ALNUM = /[A-Za-z0-9]/;
+// 全角・半角のゆれ（ＡＢＣ / ABC、１丁目 / 1丁目、ｶﾅ / カナ）は名前と文中の両方を NFKC にそろえて比べる
+const nfkc = (s) => normalizeIfNeeded(s, { extra: false })?.text ?? s;
 
 /**
  * @param entries [名前, 経度, 緯度, 読み?][]
@@ -11,7 +15,8 @@ const ALNUM = /[A-Za-z0-9]/;
  */
 export function buildMatcher(entries, { minLength = 2 } = {}) {
   const map = new Map();
-  const add = (key, name, lon, lat) => {
+  const add = (raw, name, lon, lat) => {
+    const key = raw && nfkc(raw);
     if (key && key.length >= minLength && !map.has(key)) map.set(key, { name, coordinates: [lon, lat] });
   };
   // 名前を先に登録し、読みが別の地名の名前と同じときは名前を優先する
@@ -28,11 +33,14 @@ export function buildMatcher(entries, { minLength = 2 } = {}) {
  * 英数字で始まる・終わる名前は、前後が英数字のとき（単語の一部のとき）は除く。
  * @returns {{start: number, end: number, text: string, kind: 'place', name: string, geometry: object}[]}
  */
-export function findPlaceNames(text, matcher, ranges = []) {
+export function findPlaceNames(source, matcher, ranges = []) {
   if (!matcher) return [];
+  const norm = normalizeIfNeeded(source, { extra: false });
+  const text = norm ? norm.text : source;
+  const pos = (i) => (norm ? norm.map[i] : i);
   const { map, lengths, firsts } = matcher;
   const out = [];
-  const taken = (s, e) => ranges.some((f) => s < f.end && e > f.start);
+  const taken = (s, e) => ranges.some((f) => pos(s) < f.end && pos(e) > f.start);
   for (let i = 0; i < text.length; ) {
     let hit = null;
     if (firsts.has(text[i])) {
@@ -45,18 +53,15 @@ export function findPlaceNames(text, matcher, ranges = []) {
         if (ALNUM.test(key[0]) && ALNUM.test(text[i - 1] ?? '')) continue;
         if (ALNUM.test(key.at(-1)) && ALNUM.test(text[end] ?? '')) continue;
         if (taken(i, end)) continue;
-        hit = { start: i, end, text: key, kind: 'place', name: place.name, geometry: { type: 'Point', coordinates: place.coordinates } };
+        hit = { start: i, end, name: place.name, geometry: { type: 'Point', coordinates: place.coordinates } };
         break;
       }
     }
     if (hit) {
-      out.push(hit);
+      const [start, end] = [pos(hit.start), pos(hit.end)];
+      out.push({ start, end, text: source.slice(start, end), kind: 'place', name: hit.name, geometry: hit.geometry });
       i = hit.end;
     } else i++;
   }
   return out;
 }
-
-// chrome.storage.local のキー。地名の配列は大きくなりうるので、取得日時などの情報とは分けて置く
-export const ENTRIES_KEY = 'gazetteerEntries'; // { source, entries }
-export const META_KEY = 'gazetteerMeta'; // { source, fetchedAt, count, attemptedAt, error }

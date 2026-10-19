@@ -9,7 +9,8 @@
 import { formatDms, formatLatLon, formatMgrs } from '../coordinate-notation/dist/cdn/coordinate-notation.min.js';
 import { sourceKey } from './lib/arcgis.js';
 import { axisFromContext, findLoneAngles, findLocations, pairLoneAngles } from './lib/detect.js';
-import { ENTRIES_KEY, buildMatcher, findPlaceNames } from './lib/gazetteer.js';
+import { buildMatcher, findPlaceNames } from './lib/gazetteer.js';
+import { activeServices, entriesKey, isEntriesKey, loadServices } from './lib/services.js';
 import { cellSizeText } from './lib/geohash.js';
 import { vertices } from './lib/wkt.js';
 
@@ -524,12 +525,19 @@ function injectStyle() {
 
 // ---- 地名データ ----
 
-/** キャッシュした地名を読む。今の設定（URL・属性）で取得したものだけを使う。 */
+/**
+ * キャッシュした地名を全サービス分まとめて読む。今の設定（URL・属性）で取得したものだけを使う。
+ * 同じ名前が複数のサービスにあるときは、一覧で上にあるサービスの位置を使う。
+ */
 async function loadPlaces() {
-  const s = config.gazetteer;
-  if (!s.enabled || !s.url.trim()) return null;
-  const { [ENTRIES_KEY]: cache } = await chrome.storage.local.get(ENTRIES_KEY);
-  return cache?.source === sourceKey(s) ? buildMatcher(cache.entries, { minLength: s.minLength }) : null;
+  if (!config.gazetteer.enabled) return null;
+  const services = activeServices(await loadServices());
+  const caches = await chrome.storage.local.get(services.map((s) => entriesKey(s.id)));
+  const entries = services.flatMap((s) => {
+    const cache = caches[entriesKey(s.id)];
+    return cache?.source === sourceKey(s) ? cache.entries : [];
+  });
+  return buildMatcher(entries, { minLength: config.gazetteer.minLength });
 }
 
 function watchPlaces() {
@@ -537,7 +545,7 @@ function watchPlaces() {
   // キャッシュがない・期限切れなら取り直してもらう。取り直したら storage の変化で読み直す
   send({ type: 'ensureGazetteer' }).catch(() => {});
   chrome.storage.onChanged.addListener(async (changes, area) => {
-    if (area !== 'local' || !(ENTRIES_KEY in changes)) return;
+    if (area !== 'local' || !Object.keys(changes).some(isEntriesKey)) return;
     places = await loadPlaces();
     enqueue(blocksIn(document.body));
   });
