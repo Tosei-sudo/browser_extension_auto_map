@@ -108,7 +108,7 @@ Chrome で `chrome://extensions` を開き、「デベロッパー モード」�
 `static/config.json` を直接書き換えるほか、リポジトリ直下に `config.local.json` を置くと、ビルド時にその値を `static/config.json` に重ねて `dist/config.json` を作ります（`config.local.json` は Git に含めません。書き方は [`config.local.example.json`](config.local.example.json)）。別の場所のファイルを使うときは `AUTOMAP_CONFIG=path/to/config.json npm run build` とします。
 
 - オブジェクトはキーごとに重ね、配列と値は置き換えます。書かなかった項目は `static/config.json` の値のままです。
-- `gazetteerServices` に地名のサービスの一覧（項目は下の「地名」の表のとおり。`id` は省略可）を書くと、それが既定のサービスになります。そのサイトは `manifest.json` の `host_permissions` に入るので、アクセスの許可を求めずに取得します。
+- `gazetteerServices` に地名のサービスの一覧（項目は上の「地名」の表のとおり。`id` は省略可）を書くと、それが既定のサービスになります。そのサイトは `manifest.json` の `host_permissions` に入るので、アクセスの許可を求めずに取得します。
 - 設定画面で保存した値は既定値より優先します。サービスの一覧は、設定画面で一度保存するとそちらを使い、「既定値に戻す」で既定の一覧に戻ります。
 - GitHub Actions では、リポジトリの変数 `AUTOMAP_CONFIG_JSON` に JSON を入れておくと、それを `config.local.json` として使ってビルドします。
 
