@@ -27,6 +27,7 @@
     "latlon": true,
     "plainDecimal": true,
     "minDecimals": 3,
+    "plainDegMin": true,
     "mgrs": true,
     "utm": true,
     "geohash": true,

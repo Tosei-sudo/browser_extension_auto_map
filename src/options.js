@@ -33,6 +33,7 @@ const LABELS = {
     latlon: '緯度経度（度分秒・日本語表記含む）',
     plainDecimal: '記号のない小数の組（35.681, 139.767）',
     minDecimals: '上記の小数点以下の最小桁数',
+    plainDegMin: '記号のない度分の組（緯度 4 桁・経度 5 桁、3541 13946）',
     mgrs: 'MGRS',
     utm: 'UTM',
     geohash: 'GeoHash',
