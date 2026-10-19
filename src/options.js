@@ -1,6 +1,6 @@
 /** 設定画面。config.json の既定値との差分だけを chrome.storage.sync に保存する。 */
 import { STORAGE_KEY, loadDefaults, merge } from './lib/config.js';
-import { META_KEY } from './lib/gazetteer.js';
+import { SERVICES_KEY, loadServices, metaKey, newService } from './lib/services.js';
 import { loadGeoData } from './lib/geodata.js';
 import { locate } from './lib/locate.js';
 import { drawMap, fitBounds } from './lib/render.js';
@@ -43,12 +43,6 @@ const LABELS = {
   gazetteer: {
     _: '地名（ArcGIS フィーチャーサービス）',
     enabled: '地名を検出する',
-    url: 'レイヤーの URL（…/FeatureServer/0）',
-    where: '取得する条件（where 句）',
-    nameField: '名前の属性',
-    readingField: '読みの属性（任意。読みでも検出する）',
-    lonField: '経度の属性（任意。空ならジオメトリ）',
-    latField: '緯度の属性（任意。空ならジオメトリ）',
     minLength: '検出する名前の最小文字数',
     maxAgeHours: 'キャッシュの有効期間（時間、0 は無期限）',
     pageSize: '1 回の要求で取得する件数',
@@ -87,10 +81,6 @@ function buildForm() {
         const input = Object.assign(document.createElement('input'), { type: 'number', id, value, step: 'any' });
         input.addEventListener('input', () => input.value !== '' && update(group, key, Number(input.value)));
         row.append(input);
-      } else if (group === 'gazetteer') {
-        const input = Object.assign(document.createElement('input'), { type: 'text', id, value, className: 'wide' });
-        input.addEventListener('input', () => update(group, key, input.value));
-        row.append(input);
       } else {
         const wrap = document.createElement('div');
         wrap.className = 'color';
@@ -111,49 +101,102 @@ function buildForm() {
       }
       section.append(row);
     }
-    if (group === 'gazetteer') section.append(gazetteerActions());
+    if (group === 'gazetteer') section.append(servicesEditor());
     form.append(section);
   }
-  showGazetteerStatus();
 }
 
-// ---- 地名データの取得 ----
+// ---- 地名データのサービス ----
 
-function gazetteerActions() {
-  const row = document.createElement('div');
-  row.className = 'actions';
-  const button = Object.assign(document.createElement('button'), { type: 'button', textContent: '保存して地名データを取得' });
-  const status = Object.assign(document.createElement('span'), { id: 'gazetteerStatus' });
-  button.onclick = async () => {
-    const s = current.gazetteer;
-    let origin;
-    try {
-      origin = new URL(s.url.trim()).origin;
-    } catch {
-      status.textContent = 'URL が正しくありません';
-      return;
+const SERVICE_LABELS = {
+  label: '名前（任意。一覧での見分け用）',
+  enabled: '使う',
+  url: 'レイヤーの URL（…/FeatureServer/0）',
+  where: '取得する条件（where 句）',
+  nameField: '名前の属性',
+  readingField: '読みの属性（任意。読みでも検出する）',
+  lonField: '経度の属性（任意。空ならジオメトリ）',
+  latField: '緯度の属性（任意。空ならジオメトリ）',
+};
+
+let services = [];
+
+/** 地名の section の下に、サービスごとの設定と取得ボタンを並べる。同じ名前は上のサービスが優先。 */
+function servicesEditor() {
+  const box = document.createElement('div');
+  box.className = 'services';
+  services.forEach((service, i) => {
+    const fs = document.createElement('fieldset');
+    const legend = document.createElement('legend');
+    legend.textContent = `サービス ${i + 1}`;
+    fs.append(legend);
+    for (const [key, text] of Object.entries(SERVICE_LABELS)) {
+      const row = document.createElement('div');
+      row.className = 'row';
+      const id = `service-${service.id}-${key}`;
+      const label = Object.assign(document.createElement('label'), { htmlFor: id, textContent: text });
+      const input = typeof service[key] === 'boolean'
+        ? Object.assign(document.createElement('input'), { type: 'checkbox', id, checked: service[key] })
+        : Object.assign(document.createElement('input'), { type: 'text', id, value: service[key], className: 'wide' });
+      input.addEventListener(input.type === 'checkbox' ? 'change' : 'input', () => {
+        service[key] = input.type === 'checkbox' ? input.checked : input.value;
+        document.getElementById('saved').textContent = '';
+      });
+      row.append(label, input);
+      fs.append(row);
     }
-    // サービスのサイトへのアクセスを許可してもらう（CORS に対応していないサービスでも取得できるように）
-    if (!(await chrome.permissions.request({ origins: [`${origin}/*`] }))) {
-      status.textContent = 'サイトへのアクセスが許可されませんでした';
-      return;
-    }
-    await save();
-    button.disabled = true;
-    status.textContent = '取得中…';
-    const res = await chrome.runtime.sendMessage({ type: 'refreshGazetteer', settings: s }).catch((e) => ({ error: String(e) }));
-    button.disabled = false;
-    if (!res?.ok) status.textContent = `取得できませんでした: ${res?.error ?? ''}`;
-    else showGazetteerStatus();
+    const actions = document.createElement('div');
+    actions.className = 'actions';
+    const fetchButton = Object.assign(document.createElement('button'), { type: 'button', textContent: '保存して地名データを取得' });
+    const removeButton = Object.assign(document.createElement('button'), { type: 'button', textContent: '削除' });
+    const status = Object.assign(document.createElement('span'), { className: 'status' });
+    fetchButton.onclick = () => fetchService(service, fetchButton, status);
+    removeButton.onclick = () => {
+      services.splice(i, 1);
+      buildForm();
+      document.getElementById('saved').textContent = '削除は「保存」で確定します';
+    };
+    actions.append(fetchButton, removeButton, status);
+    fs.append(actions);
+    box.append(fs);
+    showServiceStatus(service, status);
+  });
+  const add = Object.assign(document.createElement('button'), { type: 'button', textContent: 'サービスを追加' });
+  add.onclick = () => {
+    services.push(newService());
+    buildForm();
   };
-  row.append(button, status);
-  return row;
+  box.append(add);
+  return box;
 }
 
-async function showGazetteerStatus() {
-  const status = document.getElementById('gazetteerStatus');
-  const { [META_KEY]: meta } = await chrome.storage.local.get(META_KEY);
-  if (!status || !meta) return;
+async function fetchService(service, button, status) {
+  let origin;
+  try {
+    origin = new URL(service.url.trim()).origin;
+  } catch {
+    status.textContent = 'URL が正しくありません';
+    return;
+  }
+  // サービスのサイトへのアクセスを許可してもらう（CORS に対応していないサービスでも取得できるように）
+  if (!(await chrome.permissions.request({ origins: [`${origin}/*`] }))) {
+    status.textContent = 'サイトへのアクセスが許可されませんでした';
+    return;
+  }
+  await save();
+  button.disabled = true;
+  status.textContent = '取得中…';
+  const res = await chrome.runtime
+    .sendMessage({ type: 'refreshGazetteer', service, common: current.gazetteer })
+    .catch((e) => ({ error: String(e) }));
+  button.disabled = false;
+  if (!res?.ok) status.textContent = `取得できませんでした: ${res?.error ?? ''}`;
+  else showServiceStatus(service, status);
+}
+
+async function showServiceStatus(service, status) {
+  const { [metaKey(service.id)]: meta } = await chrome.storage.local.get(metaKey(service.id));
+  if (!meta) return;
   const parts = [];
   if (meta.fetchedAt) parts.push(`${meta.count} 件（${new Date(meta.fetchedAt).toLocaleString()} に取得）`);
   if (meta.error) parts.push(`前回の取得に失敗: ${meta.error}`);
@@ -179,7 +222,7 @@ function diff(base, value) {
 }
 
 async function save() {
-  await chrome.storage.sync.set({ [STORAGE_KEY]: diff(defaults, current) });
+  await chrome.storage.sync.set({ [STORAGE_KEY]: diff(defaults, current), [SERVICES_KEY]: services });
   document.getElementById('saved').textContent = '保存しました（開き直したページから反映されます）';
 }
 
@@ -209,6 +252,7 @@ async function main() {
   defaults = await loadDefaults();
   const stored = await chrome.storage.sync.get(STORAGE_KEY);
   current = merge(defaults, stored[STORAGE_KEY]);
+  services = await loadServices();
   buildForm();
   document.getElementById('save').onclick = save;
   document.getElementById('reset').onclick = async () => {

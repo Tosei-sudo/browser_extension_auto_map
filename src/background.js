@@ -4,7 +4,7 @@
  */
 import { fetchPlaces, sourceKey } from './lib/arcgis.js';
 import { STORAGE_KEY, loadConfig } from './lib/config.js';
-import { ENTRIES_KEY, META_KEY } from './lib/gazetteer.js';
+import { SERVICES_KEY, activeServices, entriesKey, loadServices, metaKey } from './lib/services.js';
 import { loadGeoData } from './lib/geodata.js';
 import { locate } from './lib/locate.js';
 import { drawMap, fitBounds } from './lib/render.js';
@@ -69,42 +69,65 @@ async function openMap(items, sourceTabId, opener) {
 
 // 取得に失敗したあと、ページを開くたびに取り直さないよう、自動の取り直しはこの間隔を空ける
 const RETRY_MS = 60 * 60 * 1000;
-let refreshing = null;
+const refreshing = new Map(); // サービスの id → 取得中の Promise
 
-/** 地名を取得して chrome.storage.local に置く。取得中に呼ばれたら同じ取得を待つ。 */
-function refreshGazetteer(settings) {
-  return (refreshing ??= (async () => {
-    const source = sourceKey(settings);
-    const { [META_KEY]: old } = await chrome.storage.local.get(META_KEY);
+/**
+ * 1 つのサービスから地名を取得して chrome.storage.local に置く。取得中に呼ばれたら同じ取得を待つ。
+ * @param service サービスの設定（services.js）  @param common 全体の設定（config.gazetteer）
+ */
+function refreshService(service, common) {
+  const { id } = service;
+  if (refreshing.has(id)) return refreshing.get(id);
+  const run = (async () => {
+    const source = sourceKey(service);
+    const { [metaKey(id)]: old } = await chrome.storage.local.get(metaKey(id));
     const attemptedAt = Date.now();
     try {
-      const entries = await fetchPlaces(settings);
+      const entries = await fetchPlaces({ ...service, pageSize: common.pageSize, maxFeatures: common.maxFeatures });
       await chrome.storage.local.set({
-        [ENTRIES_KEY]: { source, entries },
-        [META_KEY]: { source, fetchedAt: attemptedAt, count: entries.length, attemptedAt },
+        [entriesKey(id)]: { source, entries },
+        [metaKey(id)]: { source, fetchedAt: attemptedAt, count: entries.length, attemptedAt },
       });
       return { ok: true, count: entries.length };
     } catch (e) {
       const error = String(e?.message ?? e);
       // 前回の取得結果は残す（同じ設定ならそのまま使い続ける）
-      await chrome.storage.local.set({ [META_KEY]: { ...(old?.source === source ? old : { source }), attemptedAt, error } });
+      await chrome.storage.local.set({ [metaKey(id)]: { ...(old?.source === source ? old : { source }), attemptedAt, error } });
       return { ok: false, error };
     }
-  })().finally(() => (refreshing = null)));
+  })().finally(() => refreshing.delete(id));
+  refreshing.set(id, run);
+  return run;
 }
 
-/** ページを開いたとき: キャッシュがない・設定が変わった・期限切れなら取り直す。 */
+/** ページを開いたとき: キャッシュがない・設定が変わった・期限切れのサービスを取り直す。 */
 async function ensureGazetteer() {
-  const { gazetteer: s } = await getConfig();
-  if (!s.enabled || !s.url.trim() || refreshing) return { ok: true };
-  const { [META_KEY]: meta } = await chrome.storage.local.get(META_KEY);
+  const { gazetteer: common } = await getConfig();
+  if (!common.enabled) return { ok: true };
+  const services = activeServices(await loadServices()).filter((s) => !refreshing.has(s.id));
+  const metas = await chrome.storage.local.get(services.map((s) => metaKey(s.id)));
   const now = Date.now();
-  if (meta?.source === sourceKey(s)) {
-    if (meta.error && now - meta.attemptedAt < RETRY_MS) return { ok: true };
-    if (meta.fetchedAt && (!(s.maxAgeHours > 0) || now - meta.fetchedAt < s.maxAgeHours * 3600_000)) return { ok: true };
-  }
-  return refreshGazetteer(s);
+  const stale = services.filter((s) => {
+    const meta = metas[metaKey(s.id)];
+    if (meta?.source !== sourceKey(s)) return true;
+    if (meta.error && now - meta.attemptedAt < RETRY_MS) return false;
+    return !meta.fetchedAt || (common.maxAgeHours > 0 && now - meta.fetchedAt >= common.maxAgeHours * 3600_000);
+  });
+  await Promise.all(stale.map((s) => refreshService(s, common)));
+  return { ok: true };
 }
+
+// 1 サービスだけだった版のキャッシュは使わない（サービスごとのキーで取り直す）
+chrome.runtime.onInstalled.addListener(() => chrome.storage.local.remove(['gazetteerEntries', 'gazetteerMeta']));
+
+// 一覧から消したサービスのキャッシュは捨てる
+chrome.storage.onChanged.addListener(async (changes, area) => {
+  if (area !== 'sync' || !(SERVICES_KEY in changes)) return;
+  const keep = new Set((changes[SERVICES_KEY].newValue ?? []).flatMap((s) => [entriesKey(s.id), metaKey(s.id)]));
+  const stored = Object.keys(await chrome.storage.local.get(null));
+  const keys = stored.filter((k) => /^gazetteer(Entries|Meta):/.test(k) && !keep.has(k));
+  if (keys.length) await chrome.storage.local.remove(keys);
+});
 
 // ツールバーのアイコンでサイドパネル（検出一覧）を開く
 chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch(() => {});
@@ -132,7 +155,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     }
     case 'refreshGazetteer':
       // 設定画面から: 保存直後は getConfig が古いことがあるので、設定を一緒に受け取る
-      return reply(msg.settings ? refreshGazetteer(msg.settings) : getConfig().then((c) => refreshGazetteer(c.gazetteer)));
+      return reply(refreshService(msg.service, msg.common));
     case 'ensureGazetteer':
       return reply(ensureGazetteer());
     case 'locationsChanged':

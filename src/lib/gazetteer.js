@@ -56,7 +56,3 @@ export function findPlaceNames(text, matcher, ranges = []) {
   }
   return out;
 }
-
-// chrome.storage.local のキー。地名の配列は大きくなりうるので、取得日時などの情報とは分けて置く
-export const ENTRIES_KEY = 'gazetteerEntries'; // { source, entries }
-export const META_KEY = 'gazetteerMeta'; // { source, fetchedAt, count, attemptedAt, error }
