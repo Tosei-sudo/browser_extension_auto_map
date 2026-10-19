@@ -1,0 +1,19 @@
+{
+  "gazetteer": {
+    "enabled": true,
+    "maxAgeHours": 168
+  },
+  "gazetteerServices": [
+    {
+      "id": "places",
+      "label": "地名",
+      "url": "https://services.arcgis.com/xxxxxxxx/arcgis/rest/services/Places/FeatureServer/0",
+      "where": "1=1",
+      "nameField": "NAME",
+      "readingField": "KANA"
+    }
+  ],
+  "colors": {
+    "marker": "#1E88E5"
+  }
+}

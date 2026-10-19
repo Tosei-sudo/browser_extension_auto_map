@@ -531,7 +531,7 @@ function injectStyle() {
  */
 async function loadPlaces() {
   if (!config.gazetteer.enabled) return null;
-  const services = activeServices(await loadServices());
+  const services = activeServices(await loadServices(config.gazetteerServices));
   const caches = await chrome.storage.local.get(services.map((s) => entriesKey(s.id)));
   const entries = services.flatMap((s) => {
     const cache = caches[entriesKey(s.id)];

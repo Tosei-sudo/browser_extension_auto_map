@@ -1,6 +1,6 @@
 /** 設定画面。config.json の既定値との差分だけを chrome.storage.sync に保存する。 */
 import { STORAGE_KEY, loadDefaults, merge } from './lib/config.js';
-import { SERVICES_KEY, loadServices, metaKey, newService } from './lib/services.js';
+import { SERVICES_KEY, defaultServices, loadServices, metaKey, newService } from './lib/services.js';
 import { loadGeoData } from './lib/geodata.js';
 import { locate } from './lib/locate.js';
 import { drawMap, fitBounds } from './lib/render.js';
@@ -61,6 +61,8 @@ const form = document.getElementById('form');
 function buildForm() {
   form.textContent = '';
   for (const [group, values] of Object.entries(defaults)) {
+    // 配列（gazetteerServices）は地名の section の中でサービスごとに編集する
+    if (Array.isArray(values)) continue;
     const section = document.createElement('section');
     const h2 = document.createElement('h2');
     h2.textContent = LABELS[group]?._ ?? group;
@@ -214,6 +216,7 @@ function update(group, key, value) {
 function diff(base, value) {
   const out = {};
   for (const [k, v] of Object.entries(base)) {
+    if (Array.isArray(v)) continue; // サービスの一覧は SERVICES_KEY に別に保存する
     if (v && typeof v === 'object') {
       const d = diff(v, value[k]);
       if (Object.keys(d).length) out[k] = d;
@@ -253,12 +256,13 @@ async function main() {
   defaults = await loadDefaults();
   const stored = await chrome.storage.sync.get(STORAGE_KEY);
   current = merge(defaults, stored[STORAGE_KEY]);
-  services = await loadServices();
+  services = await loadServices(defaults.gazetteerServices);
   buildForm();
   document.getElementById('save').onclick = save;
   document.getElementById('reset').onclick = async () => {
-    await chrome.storage.sync.remove(STORAGE_KEY);
+    await chrome.storage.sync.remove([STORAGE_KEY, SERVICES_KEY]);
     current = structuredClone(defaults);
+    services = defaultServices(defaults.gazetteerServices);
     buildForm();
     preview();
     document.getElementById('saved').textContent = '既定値に戻しました';

@@ -3,9 +3,13 @@
  *   node scripts/build.mjs           ビルド
  *   node scripts/build.mjs --watch   変更を監視して再ビルド
  * 国境データ（static/data/）は先に `npm run build:data` で作っておく。
+ *
+ * 設定の既定値は static/config.json。config.local.json（または環境変数 AUTOMAP_CONFIG で指定した JSON）があれば、
+ * その値を重ねて dist/config.json にする（scripts/apply-config.mjs。ビルド後の配布物に重ねることもできる）。
  */
 import fs from 'node:fs';
 import * as esbuild from 'esbuild';
+import { applyConfig } from './apply-config.mjs';
 
 const OUT = 'dist';
 const watch = process.argv.includes('--watch');
@@ -17,8 +21,15 @@ if (!fs.existsSync('static/data/l2.bin')) {
 
 fs.rmSync(OUT, { recursive: true, force: true });
 fs.cpSync('static', OUT, { recursive: true });
+applyLocalConfig();
 // 配布物にもライセンスと第三者の表記を入れる
 for (const f of ['LICENSE', 'THIRD_PARTY_NOTICES.md']) fs.copyFileSync(f, `${OUT}/${f}`);
+
+function applyLocalConfig() {
+  const file = process.env.AUTOMAP_CONFIG || 'config.local.json';
+  if (fs.existsSync(file)) applyConfig(file, OUT);
+  else if (process.env.AUTOMAP_CONFIG) throw new Error(`${file} がありません`);
+}
 
 const options = {
   entryPoints: {

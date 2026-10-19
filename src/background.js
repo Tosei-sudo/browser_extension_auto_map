@@ -102,9 +102,9 @@ function refreshService(service, common) {
 
 /** ページを開いたとき: キャッシュがない・設定が変わった・期限切れのサービスを取り直す。 */
 async function ensureGazetteer() {
-  const { gazetteer: common } = await getConfig();
+  const { gazetteer: common, gazetteerServices } = await getConfig();
   if (!common.enabled) return { ok: true };
-  const services = activeServices(await loadServices()).filter((s) => !refreshing.has(s.id));
+  const services = activeServices(await loadServices(gazetteerServices)).filter((s) => !refreshing.has(s.id));
   const metas = await chrome.storage.local.get(services.map((s) => metaKey(s.id)));
   const now = Date.now();
   const stale = services.filter((s) => {
