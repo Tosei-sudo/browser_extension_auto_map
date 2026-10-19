@@ -61,7 +61,7 @@ UTM の `S` は「南半球」と「緯度帯 S（北緯 32〜40 度）」のど
 - 照合は名前（と読み）の完全一致で、同じ位置からは最も長い名前を採ります。英数字の名前は単語の一部では検出しません。同じ名前が複数あるときは、一覧で上にあるサービスの、最初の 1 件の位置を使います。
 - 位置は緯度・経度の属性を指定すればその値を、空ならジオメトリ（点以外は外接矩形の中心）を使います。
 
-サービスごとの設定（`chrome.storage.sync` の `gazetteerServices`）:
+サービスごとの設定（設定画面で保存した一覧は `chrome.storage.sync` の `gazetteerServices`、既定の一覧は `config.json` の `gazetteerServices`）:
 
 | 項目 | 内容 | 既定値 |
 | --- | --- | --- |
@@ -102,6 +102,15 @@ Chrome で `chrome://extensions` を開き、「デベロッパー モード」�
 ## 設定
 
 既定値は `static/config.json`（ビルド後は `dist/config.json`）です。拡張機能の「オプション」画面でも変更でき、そこで保存した値は既定値に上書きされます（プレビュー付き）。
+
+### 既定値を JSON で決める（ビルド時）
+
+`static/config.json` を直接書き換えるほか、リポジトリ直下に `config.local.json` を置くと、ビルド時にその値を `static/config.json` に重ねて `dist/config.json` を作ります（`config.local.json` は Git に含めません。書き方は [`config.local.example.json`](config.local.example.json)）。別の場所のファイルを使うときは `AUTOMAP_CONFIG=path/to/config.json npm run build` とします。
+
+- オブジェクトはキーごとに重ね、配列と値は置き換えます。書かなかった項目は `static/config.json` の値のままです。
+- `gazetteerServices` に地名のサービスの一覧（項目は下の「地名」の表のとおり。`id` は省略可）を書くと、それが既定のサービスになります。そのサイトは `manifest.json` の `host_permissions` に入るので、アクセスの許可を求めずに取得します。
+- 設定画面で保存した値は既定値より優先します。サービスの一覧は、設定画面で一度保存するとそちらを使い、「既定値に戻す」で既定の一覧に戻ります。
+- GitHub Actions では、リポジトリの変数 `AUTOMAP_CONFIG_JSON` に JSON を入れておくと、それを `config.local.json` として使ってビルドします。
 
 | キー | 内容 | 既定値 |
 | --- | --- | --- |

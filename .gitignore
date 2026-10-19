@@ -5,3 +5,5 @@ static/data/
 country_bound.geojson
 # ローカルの Claude Code 設定
 .claude/settings.local.json
+# ビルド時に重ねる設定の既定値（config.local.example.json を参照）
+config.local.json

@@ -24,6 +24,12 @@ jobs:
       # 国境データの元ファイル（約 150 MB）はリポジトリにないので、コミット済みの dist/data/ を使う
       - name: Prepare border data
         run: mkdir -p static/data && cp dist/data/* static/data/
+      # リポジトリの変数 AUTOMAP_CONFIG_JSON があれば、ビルド時に重ねる設定（config.local.json）として使う
+      - name: Write config.local.json
+        if: vars.AUTOMAP_CONFIG_JSON != ''
+        run: printf '%s' "$CONFIG" > config.local.json
+        env:
+          CONFIG: ${{ vars.AUTOMAP_CONFIG_JSON }}
       - run: npm run build
       - uses: actions/upload-artifact@v4
         if: github.event_name != 'pull_request'

@@ -41,5 +41,6 @@
     "maxAgeHours": 168,
     "pageSize": 1000,
     "maxFeatures": 100000
-  }
+  },
+  "gazetteerServices": []
 }
