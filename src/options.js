@@ -1,6 +1,7 @@
 /** 設定画面。config.json の既定値との差分だけを chrome.storage.sync に保存する。 */
 import { STORAGE_KEY, loadDefaults, merge } from './lib/config.js';
 import { SERVICES_KEY, defaultServices, loadServices, metaKey, newService } from './lib/services.js';
+import { invalidPatterns } from './lib/sites.js';
 import { loadGeoData } from './lib/geodata.js';
 import { locate } from './lib/locate.js';
 import { drawMap, fitBounds } from './lib/render.js';
@@ -27,6 +28,10 @@ const LABELS = {
     minSpanDeg: '最小表示範囲（度）',
     oceanSpanDeg: '海上の点の表示範囲（度）',
     maxCountrySpanDeg: '国全体を映す上限（度）',
+  },
+  sites: {
+    _: 'サイト',
+    exclude: '稼働しないサイト（URL の正規表現。1 行に 1 つ）',
   },
   detect: {
     _: '検出する表記',
@@ -61,8 +66,8 @@ const form = document.getElementById('form');
 function buildForm() {
   form.textContent = '';
   for (const [group, values] of Object.entries(defaults)) {
-    // 配列（gazetteerServices）は地名の section の中でサービスごとに編集する
-    if (Array.isArray(values)) continue;
+    // サービスの一覧（gazetteerServices）は地名の section の中でサービスごとに編集する
+    if (group === SERVICES_KEY) continue;
     const section = document.createElement('section');
     const h2 = document.createElement('h2');
     h2.textContent = LABELS[group]?._ ?? group;
@@ -80,6 +85,22 @@ function buildForm() {
         const input = Object.assign(document.createElement('input'), { type: 'checkbox', id, checked: value });
         input.addEventListener('change', () => update(group, key, input.checked));
         row.append(input);
+      } else if (Array.isArray(value)) {
+        // 文字列の配列は 1 行に 1 つ書く
+        const wrap = document.createElement('div');
+        const input = Object.assign(document.createElement('textarea'), { id, value: value.join('\n'), rows: 4, spellcheck: false });
+        const error = Object.assign(document.createElement('div'), { className: 'error' });
+        const check = () => {
+          const bad = group === 'sites' ? invalidPatterns(current[group][key]) : [];
+          error.textContent = bad.length ? `正規表現として読めないため無視します: ${bad.join('、')}` : '';
+        };
+        input.addEventListener('input', () => {
+          update(group, key, input.value.split('\n').map((s) => s.trim()).filter(Boolean));
+          check();
+        });
+        check();
+        wrap.append(input, error);
+        row.append(wrap);
       } else if (typeof value === 'number') {
         const input = Object.assign(document.createElement('input'), { type: 'number', id, value, step: 'any' });
         input.addEventListener('input', () => input.value !== '' && update(group, key, Number(input.value)));
@@ -216,8 +237,10 @@ function update(group, key, value) {
 function diff(base, value) {
   const out = {};
   for (const [k, v] of Object.entries(base)) {
-    if (Array.isArray(v)) continue; // サービスの一覧は SERVICES_KEY に別に保存する
-    if (v && typeof v === 'object') {
+    if (k === SERVICES_KEY) continue; // サービスの一覧は SERVICES_KEY に別に保存する
+    if (Array.isArray(v)) {
+      if (JSON.stringify(v) !== JSON.stringify(value[k])) out[k] = value[k];
+    } else if (v && typeof v === 'object') {
       const d = diff(v, value[k]);
       if (Object.keys(d).length) out[k] = d;
     } else if (value[k] !== v) out[k] = value[k];
