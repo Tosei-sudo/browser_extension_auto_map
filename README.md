@@ -132,6 +132,7 @@ npm run configure -- settings.json path/to/automap   # 配布用に展開した�
 | `image.width` / `height` | ホバー画像の大きさ (px) | 320 × 200 |
 | `image.oceanSpanDeg` | 海上の点の表示範囲（度） | 40 |
 | `image.maxCountrySpanDeg` | これより広い国（海外領土を含む国など）は点のある島・大陸部分だけを映す | 60 |
+| `sites.exclude` | 稼働しないサイト。URL（`location.href`）に対する正規表現の配列で、大文字小文字は区別しない。設定画面では 1 行に 1 つ書く。正規表現として読めない行は無視する | `[]` |
 | `detect.*` | 検出する表記の切り替え | すべて有効 |
 
 色は CSS の色表記（`#RRGGBB`、`rgba(...)` など）が使えます。ホバー画像と別タブの地図は同じ設定・同じ描画処理を使います。
@@ -165,6 +166,7 @@ src/lib/arcgis.js   ArcGIS フィーチャーサービスからの地名の取�
 src/lib/gazetteer.js キャッシュした地名による文中の地名の検出
 src/lib/services.js 地名を取得するサービスの一覧とキャッシュのキー
 src/lib/normalize.js 全角・半角のゆれをそろえる（元の位置との対応つき）
+src/lib/sites.js    稼働しないサイトの判定
 ```
 
 ## ライセンス

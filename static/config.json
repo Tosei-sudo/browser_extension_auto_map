@@ -23,6 +23,9 @@
     "oceanSpanDeg": 40,
     "maxCountrySpanDeg": 60
   },
+  "sites": {
+    "exclude": []
+  },
   "detect": {
     "latlon": true,
     "plainDecimal": true,

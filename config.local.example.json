@@ -1,4 +1,10 @@
 {
+  "sites": {
+    "exclude": [
+      "^https://mail\\.google\\.com/",
+      "^https?://localhost(:\\d+)?/"
+    ]
+  },
   "gazetteer": {
     "enabled": true,
     "maxAgeHours": 168

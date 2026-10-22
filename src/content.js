@@ -11,6 +11,7 @@ import { sourceKey } from './lib/arcgis.js';
 import { axisFromContext, findLoneAngles, findLocations, pairLoneAngles } from './lib/detect.js';
 import { buildMatcher, findPlaceNames } from './lib/gazetteer.js';
 import { activeServices, entriesKey, isEntriesKey, loadServices } from './lib/services.js';
+import { isExcluded } from './lib/sites.js';
 import { cellSizeText } from './lib/geohash.js';
 import { vertices } from './lib/wkt.js';
 
@@ -27,6 +28,7 @@ const HAS_DIGIT = /[0-9０-９]/;
 const HL = 'automap';
 
 let config = null;
+let excluded = false; // 稼働しないサイト
 let places = null; // 地名の照合用の索引（gazetteer.js の buildMatcher）
 const send = (msg) => chrome.runtime.sendMessage(msg);
 
@@ -508,7 +510,7 @@ function reveal(id) {
 }
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
-  if (msg?.type === 'listLocations') sendResponse({ items: liveLocs().map(toItem), url: location.href, title: document.title });
+  if (msg?.type === 'listLocations') sendResponse({ items: liveLocs().map(toItem), excluded, url: location.href, title: document.title });
   else if (msg?.type === 'revealLocation') sendResponse({ ok: reveal(msg.id) });
 });
 
@@ -555,6 +557,11 @@ async function main() {
   if (!document.body || !globalThis.CSS?.highlights) return;
   config = await send({ type: 'getConfig' });
   if (!config || config.error) return;
+  // 稼働しないサイト（設定の sites.exclude）では何もしない。サイドパネルにはその旨だけ返す
+  if (isExcluded(location.href, config.sites.exclude)) {
+    excluded = true;
+    return;
+  }
   places = await loadPlaces().catch(() => null);
   watchPlaces();
   injectStyle();

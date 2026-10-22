@@ -46,7 +46,7 @@ async function refresh() {
   }
   items = res.items;
   countries = [];
-  render();
+  render(res.excluded ? 'このサイトでは稼働しない設定です（設定の「稼働しないサイト」）。' : undefined);
   if (!items.length) return;
   const described = await chrome.runtime.sendMessage({ type: 'describe', geometries: items.map((i) => i.geometry) });
   if (gen !== generation || !Array.isArray(described)) return;
