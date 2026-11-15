@@ -3,7 +3,8 @@
  *   node scripts/apply-config.mjs settings.json [拡張機能のフォルダ（既定 dist）]
  *   npm run configure -- settings.json [フォルダ]
  * フォルダの config.json に重ねる（オブジェクトはキーごとに重ね、配列と値は置き換える）。
- * 既定のサービス（gazetteerServices）のサイトは、取得の許可を求めずに済むよう manifest.json の host_permissions に入れる。
+ * 既定のサービス（gazetteerServices）のサイトは、取得の許可を求めずに済むよう manifest.json の host_permissions に入れる
+ * （MIKAGE に送るための 127.0.0.1・localhost はいつも入れる）。
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -16,6 +17,9 @@ function deepMerge(base, over) {
   return out;
 }
 
+/** MIKAGE（QGIS）への送信先。MIKAGE はこの PC の中だけで待ち受ける（src/lib/mikage.js）。 */
+const LOOPBACK = ['http://127.0.0.1/*', 'http://localhost/*'];
+
 const readJson = (file) => JSON.parse(fs.readFileSync(file, 'utf8'));
 const writeJson = (file, value) => fs.writeFileSync(file, `${JSON.stringify(value, null, 2)}\n`);
 
@@ -26,8 +30,7 @@ export function applyConfig(file, dir = 'dist') {
   writeJson(configFile, config);
   const origins = [...new Set((config.gazetteerServices ?? []).map((s) => new URL(s.url).origin))].map((o) => `${o}/*`);
   const manifest = readJson(manifestFile);
-  if (origins.length) manifest.host_permissions = origins;
-  else delete manifest.host_permissions;
+  manifest.host_permissions = [...LOOPBACK, ...origins.filter((o) => !LOOPBACK.includes(o))];
   writeJson(manifestFile, manifest);
   console.log(`${file} の設定を ${configFile} に重ねました${origins.length ? `（host_permissions: ${origins.join(', ')}）` : ''}`);
 }

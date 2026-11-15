@@ -6,6 +6,7 @@ import { fetchPlaces, sourceKey } from './lib/arcgis.js';
 import { STORAGE_KEY, loadConfig } from './lib/config.js';
 import { SERVICES_KEY, activeServices, entriesKey, loadServices, metaKey } from './lib/services.js';
 import { loadGeoData } from './lib/geodata.js';
+import { sendToMikage } from './lib/mikage.js';
 import { locate } from './lib/locate.js';
 import { drawMap, fitBounds } from './lib/render.js';
 
@@ -50,12 +51,12 @@ async function describe(geometries) {
 
 // 地図タブに渡す内容は URL に入りきらないことがあるので、session ストレージ経由で渡す（新しいものから MAX_MAPS 件だけ残す）
 const MAX_MAPS = 30;
-async function openMap(items, sourceTabId, opener) {
+async function openMap(items, sourceTabId, opener, page) {
   const id = `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`;
   const { mapKeys = [] } = await chrome.storage.session.get('mapKeys');
   const keys = [...mapKeys, `map:${id}`];
   const old = keys.splice(0, Math.max(0, keys.length - MAX_MAPS));
-  await chrome.storage.session.set({ [`map:${id}`]: { items, sourceTabId }, mapKeys: keys });
+  await chrome.storage.session.set({ [`map:${id}`]: { items, sourceTabId, page }, mapKeys: keys });
   if (old.length) await chrome.storage.session.remove(old);
   await chrome.tabs.create({
     url: chrome.runtime.getURL(`map.html?id=${id}`),
@@ -151,8 +152,15 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       // ページから: sender.tab が元のタブ。サイドパネルから: msg.tabId で元のタブを指定する
       const sourceTabId = sender.tab?.id ?? msg.tabId;
       const opener = sender.tab ? Promise.resolve(sender.tab) : chrome.tabs.get(msg.tabId).catch(() => null);
-      return reply(opener.then((tab) => openMap(msg.items, sourceTabId, tab)));
+      return reply(opener.then((tab) => openMap(msg.items, sourceTabId, tab, msg.page)));
     }
+    case 'sendToMikage':
+      // ページ・サイドパネル・地図タブから: 拡張機能の host_permissions で 127.0.0.1 の MIKAGE に送る
+      return reply(
+        getConfig().then((config) =>
+          config.mikage.enabled ? sendToMikage(config.mikage.url, msg.items, msg.page) : { ok: false, error: '設定で「MIKAGE に送る」がオフです' },
+        ),
+      );
     case 'refreshGazetteer':
       // 設定画面から: 保存直後は getConfig が古いことがあるので、設定を一緒に受け取る
       return reply(refreshService(msg.service, msg.common));

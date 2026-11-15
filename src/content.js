@@ -1,6 +1,6 @@
 /**
  * ページ内のテキストから位置の記述を探してハイライトし、
- * ホバーで地図画像、クリックで動かせる地図（別タブ）を表示する。
+ * ホバーで地図画像、クリックで動かせる地図（別タブ）を表示する。Shift+クリックで MIKAGE（QGIS）に送る。
  *
  * ページの DOM は書き換えない。ハイライトは CSS Custom Highlight API（Range）で描き、
  * マウスの下の文字は caretPositionFromPoint で調べる。React などがテキストノードを持ち続けて
@@ -12,6 +12,7 @@ import { axisFromContext, findLoneAngles, findLocations, pairLoneAngles } from '
 import { buildMatcher, findPlaceNames } from './lib/gazetteer.js';
 import { activeServices, entriesKey, isEntriesKey, loadServices } from './lib/services.js';
 import { cellSizeText } from './lib/geohash.js';
+import { resultText, shortText } from './lib/mikage.js';
 import { vertices } from './lib/wkt.js';
 
 const KIND_LABEL = { latlon: '緯度経度', mgrs: 'MGRS', utm: 'UTM', geohash: 'GeoHash', wkt: 'WKT', place: '地名' };
@@ -391,7 +392,8 @@ async function show(hit) {
 
   const { img, country, coord, hint } = tooltipParts;
   const mod = /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl';
-  hint.textContent = linkOf(range) ? `クリックで地図を開く（${mod}+クリックでリンクを開く）` : 'クリックで地図を開く';
+  const mikage = config.mikage.enabled ? '・Shift+クリックで MIKAGE に送る' : '';
+  hint.textContent = linkOf(range) ? `クリックで地図を開く${mikage}（${mod}+クリックでリンクを開く）` : `クリックで地図を開く${mikage}`;
   img.width = config.image.width;
   img.height = config.image.height;
   img.removeAttribute('src');
@@ -463,10 +465,46 @@ function bindEvents() {
       if (!hit) return;
       e.preventDefault();
       e.stopPropagation();
-      send({ type: 'openMap', items: [toItem(hit.loc)] });
+      const page = { title: document.title, url: location.href };
+      if (e.shiftKey && config.mikage.enabled) sendToMikage([toItem(hit.loc)], page);
+      else send({ type: 'openMap', items: [toItem(hit.loc)], page });
     },
     true,
   );
+}
+
+// ---- MIKAGE（QGIS）に送った結果の表示（画面の右下に数秒） ----
+
+let toast = null;
+let toastTimer = 0;
+function showToast(text, kind) {
+  if (!toast) {
+    const host = document.createElement('div');
+    host.id = 'automap-toast';
+    host.style.cssText = 'position:fixed;z-index:2147483647;right:16px;bottom:16px;max-width:min(420px,calc(100vw - 32px));pointer-events:none;';
+    const root = host.attachShadow({ mode: 'closed' });
+    root.innerHTML = `
+      <style>
+        .t { font: 12px/1.5 system-ui, -apple-system, "Segoe UI", "Hiragino Sans", "Meiryo", sans-serif; color: #fff; background: rgba(31,35,40,.94);
+             border-radius: 8px; padding: 8px 12px; box-shadow: 0 6px 24px rgba(0,0,0,.25); word-break: break-all; }
+        .t.err { background: #b42318; }
+      </style>
+      <div class="t"></div>`;
+    document.documentElement.append(host);
+    toast = { host, box: root.querySelector('.t') };
+  }
+  // 文字列はテキストとして入れる（レイヤー名などに外の文字列が入る）
+  toast.box.textContent = text;
+  toast.box.className = kind === 'err' ? 't err' : 't';
+  toast.host.style.display = 'block';
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => (toast.host.style.display = 'none'), kind === 'err' ? 9000 : 5000);
+}
+
+async function sendToMikage(items, page) {
+  showToast(`MIKAGE に送信中…（${shortText(items[0].text)}）`);
+  const res = await send({ type: 'sendToMikage', items, page }).catch((e) => ({ ok: false, error: String(e?.message ?? e) }));
+  showToast(resultText(res), res?.ok ? 'ok' : 'err');
 }
 
 // ---- サイドパネルの一覧とのやりとり ----
