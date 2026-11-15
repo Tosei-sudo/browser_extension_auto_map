@@ -21,7 +21,8 @@ import { loadConfig } from './lib/config.js';
 import { LEVEL_TOLERANCE, SCALE, findCountry, loadGeoData } from './lib/geodata.js';
 import { expandToMinSpan, locate } from './lib/locate.js';
 import { cellSizeText } from './lib/geohash.js';
-import { geometryBbox, imageViewerUrl } from './lib/wkt.js';
+import { resultText } from './lib/mikage.js';
+import { geometryBbox } from './lib/wkt.js';
 
 const KIND_LABEL = { latlon: '緯度経度', mgrs: 'MGRS', utm: 'UTM', geohash: 'GeoHash', wkt: 'WKT', place: '地名' };
 // 赤道での 1 度の長さ（m）。表示解像度（m/px）と間引き許容誤差（度）の換算に使う
@@ -181,8 +182,19 @@ function showDetail(item, countries) {
     dd.textContent = v;
     dl.append(dt, dd);
   }
-  document.getElementById('viewer').href = imageViewerUrl(g);
-  document.getElementById('viewer').hidden = false;
+}
+
+/** MIKAGE（QGIS）に送り、結果をパネルに出す。 */
+async function sendToMikage(list, button, page) {
+  const note = document.getElementById('sent');
+  button.disabled = true;
+  note.hidden = false;
+  note.className = 'sent';
+  note.textContent = `MIKAGE に ${list.length} 件を送信中…`;
+  const res = await chrome.runtime.sendMessage({ type: 'sendToMikage', items: list, page }).catch((e) => ({ ok: false, error: String(e?.message ?? e) }));
+  button.disabled = false;
+  note.className = res?.ok ? (res.errors?.length ? 'sent warn' : 'sent ok') : 'sent err';
+  note.textContent = resultText(res);
 }
 
 async function main() {
@@ -206,6 +218,7 @@ async function main() {
       : expandToMinSpan(items.map((it) => geometryBbox(it.geometry)).reduce(union), config.image.minSpanDeg);
 
   let selected = items.length === 1 ? items[0].id : null;
+  const page = params.page ?? {};
   const single = items.length === 1;
   const title = single ? items[0].text : `${items.length} 件の位置`;
   document.title = `AutoMap - ${title}`;
@@ -234,6 +247,7 @@ async function main() {
   const list = document.getElementById('items');
   const select = (index, zoom) => {
     selected = items[index].id;
+    document.getElementById('sendOne').disabled = false;
     marks.changed();
     showDetail(items[index], located[index].countries);
     for (const li of list.children) li.classList.toggle('selected', Number(li.dataset.index) === index);
@@ -254,9 +268,23 @@ async function main() {
       list.append(li);
     });
     list.hidden = false;
-    const all = document.getElementById('viewerAll');
-    all.href = imageViewerUrl({ type: 'GeometryCollection', geometries: items.map((it) => it.geometry) });
-    all.hidden = false;
+  }
+  // 「MIKAGE に送る」: 1 件なら（複数なら選んだ）位置、「すべてを MIKAGE に送る」: 全件
+  if (config.mikage.enabled) {
+    const one = document.getElementById('sendOne');
+    const all = document.getElementById('sendAll');
+    one.hidden = false;
+    one.disabled = !single;
+    one.title = single ? 'この位置を MIKAGE（QGIS）に送る' : '一覧か地図で位置を選ぶと送れます';
+    one.onclick = () => {
+      const item = items.find((it) => it.id === selected);
+      if (item) sendToMikage([item], one, page);
+    };
+    if (!single) {
+      all.hidden = false;
+      all.textContent = `すべて（${items.length} 件）を MIKAGE に送る`;
+      all.onclick = () => sendToMikage(items, all, page);
+    }
   }
   map.getView().fit(toExtent(bbox), fitOptions());
 

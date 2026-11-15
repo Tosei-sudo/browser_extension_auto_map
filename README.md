@@ -9,8 +9,7 @@
 - ツールバーのアイコンに検出件数を表示し、アイコンを押すとサイドパネルに一覧を表示します。
   - 行をクリックするとページの該当箇所までスクロールして点滅します。「地図」で 1 件、「すべて地図で表示」で全件（種類で絞り込んだときはその分）を地図タブに出します。
   - 全件の地図では、左の一覧で選ぶとその位置へ寄り、地図上の位置をクリックすると元のタブに切り替えて該当箇所を表示します。
-- 画像ビューアアプリ（`web+imageviewer` プロトコル）へのリンクを、地図タブの情報パネル（表示中・選択中の位置、全件表示では「すべて」も）とサイドパネルの各行に置いています。
-  URL は `web+imageviewer:geom=<WKT を encodeURIComponent したもの>` で、全件は `GEOMETRYCOLLECTION` にまとめます（例: `web+imageviewer:geom=POINT%20(139.7671%2035.6812)`）。
+- 見つけた位置を QGIS のプラグイン MIKAGE に送れます（下の「[MIKAGE（QGIS）に送る](#mikageqgisに送る)」）。ハイライトを Shift+クリック、サイドパネルの各行の「MIKAGE」と「すべて MIKAGE に送る」、地図タブの「MIKAGE に送る」から送ります。
 
 ## 対応している表記
 
@@ -83,6 +82,25 @@ UTM の `S` は「南半球」と「緯度帯 S（北緯 32〜40 度）」のど
 
 1 サービスだけだった版の設定（`gazetteer.url` など）は、そのまま 1 つ目のサービスとして読み込みます。
 
+## MIKAGE（QGIS）に送る
+
+MIKAGE は QGIS の起動中、この PC の中だけ（`http://127.0.0.1:47631`）で図形を待ち受けます。AutoMap はそこへ位置を送り、MIKAGE はレイヤーグループ「受け取った図形」に点・線・面のレイヤーを追加して、地図をその位置へ移動します（MIKAGE の README「外部から図形を受け取る」）。
+
+- 送り方
+  - ページのハイライトを **Shift+クリック**: その 1 件。結果はページの右下に数秒出ます。
+  - サイドパネル: 各行の「MIKAGE」でその 1 件、上の「すべて MIKAGE に送る」で全件（種類で絞り込んだときはその分）。
+  - 地図タブ: 「MIKAGE に送る」で表示中・選択中の 1 件、全件表示では「すべて（n 件）を MIKAGE に送る」も。
+- 送る内容は GeoJSON の FeatureCollection です。属性は `label`（元の文字列。40 文字を超える WKT などは縮めて、全体は `text`）、`kind`（緯度経度・MGRS・WKT・地名など）、`place`（地名）、`page_title` / `page_url`（元のページ）。
+  レイヤー名は 1 件ならそのラベル、複数なら「ページのタイトル（n 件）」です。
+- 送るのは拡張機能の Service Worker からで、ページから直接は送りません。`manifest.json` の `host_permissions` に `http://127.0.0.1/*` と `http://localhost/*` があるので、ページの CORS や Chrome の「ローカル ネットワーク アクセス」の確認に止められません。
+  （Chrome 142〜143 には拡張機能でも確認に止められる不具合があり、144 で直っています。古い版を使う組織では、ポリシー `LocalNetworkAccessAllowedForUrls` に `http://127.0.0.1:47631` を入れてください。）
+- 送信先はこの PC（`127.0.0.1`・`localhost`・`[::1]`）に限ります。設定を誤ってもページの内容を外へ送りません。
+- 送れなかったときは理由を表示します。
+  - 「MIKAGE に接続できませんでした」: QGIS が起動していない、MIKAGE が無効、MIKAGE の設定ファイルの `shapeReceiver` が `false`、ポートが違う、のいずれか。MIKAGE の入った QGIS を 2 つ開いているときは先に開いた方が受け取ります。
+  - 「MIKAGE が受け取りませんでした: 送信元 … からは受け取らない」: MIKAGE の設定ファイルの `shapeReceiver.origins` にこの拡張機能（`chrome-extension://*` か `chrome-extension://<ID>`）がありません。
+  - 「… は MIKAGE ではありません」: そのポートでほかのプログラムが待ち受けています。MIKAGE の `shapeReceiver.port` と `mikage.url` をそろえてください。
+- 使わないときは設定画面か `config.json` で `mikage.enabled` を `false` にします（ボタンと Shift+クリックが消えます）。
+
 ## 使い方
 
 国境データ `country_bound.geojson`（約 150 MB）は GitHub のファイルサイズ上限を超えるためリポジトリに含めていません。[World Bank Official Boundaries](https://datacatalog.worldbank.org/search/dataset/0038272) から国（Admin 0）の境界の GeoJSON をダウンロードし、`country_bound.geojson` という名前でこのフォルダ直下に置いてください。
@@ -115,7 +133,7 @@ npm run configure -- settings.json path/to/automap   # 配布用に展開した�
 ビルドのときに重ねることもできます。リポジトリ直下に `config.local.json`（Git に含めません）を置くか、`AUTOMAP_CONFIG=path/to/settings.json npm run build` とします。
 
 - オブジェクトはキーごとに重ね、配列と値は置き換えます。書かなかった項目は `static/config.json` の値のままです。
-- `gazetteerServices` に地名のサービスの一覧（項目は上の「地名」の表のとおり。`id` は省略可）を書くと、それが既定のサービスになります。そのサイトは `manifest.json` の `host_permissions` に入るので、アクセスの許可を求めずに取得します。
+- `gazetteerServices` に地名のサービスの一覧（項目は上の「地名」の表のとおり。`id` は省略可）を書くと、それが既定のサービスになります。そのサイトは `manifest.json` の `host_permissions` に（MIKAGE に送るための `http://127.0.0.1/*`・`http://localhost/*` と並べて）入るので、アクセスの許可を求めずに取得します。
 - 設定画面で保存した値は既定値より優先します。サービスの一覧は、設定画面で一度保存するとそちらを使い、「既定値に戻す」で既定の一覧に戻ります。
 - GitHub Actions では、リポジトリの変数 `AUTOMAP_CONFIG_JSON` に JSON を入れておくと、それを `config.local.json` として使ってビルドします。
 
@@ -133,6 +151,8 @@ npm run configure -- settings.json path/to/automap   # 配布用に展開した�
 | `image.oceanSpanDeg` | 海上の点の表示範囲（度） | 40 |
 | `image.maxCountrySpanDeg` | これより広い国（海外領土を含む国など）は点のある島・大陸部分だけを映す | 60 |
 | `detect.*` | 検出する表記の切り替え | すべて有効 |
+| `mikage.enabled` | MIKAGE（QGIS）に送るボタンと Shift+クリック | `true` |
+| `mikage.url` | 送信先（この PC の `http://127.0.0.1:ポート` だけ。MIKAGE の `shapeReceiver.port` とそろえる） | `http://127.0.0.1:47631` |
 
 色は CSS の色表記（`#RRGGBB`、`rgba(...)` など）が使えます。ホバー画像と別タブの地図は同じ設定・同じ描画処理を使います。
 
@@ -164,6 +184,7 @@ src/lib/geodata.js  国境データの読み込みと点の国判定
 src/lib/arcgis.js   ArcGIS フィーチャーサービスからの地名の取得
 src/lib/gazetteer.js キャッシュした地名による文中の地名の検出
 src/lib/services.js 地名を取得するサービスの一覧とキャッシュのキー
+src/lib/mikage.js   MIKAGE（QGIS）に送る
 src/lib/normalize.js 全角・半角のゆれをそろえる（元の位置との対応つき）
 ```
 

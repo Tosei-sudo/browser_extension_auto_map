@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { imageViewerUrl, parseWkt, toWkt } from '../src/lib/wkt.js';
+import { parseWkt, toWkt } from '../src/lib/wkt.js';
 
 const samples = [
   'POINT (139.7671 35.6812)',
@@ -14,6 +14,3 @@ const samples = [
 for (const wkt of samples) test(`round trip: ${wkt.split(' ')[0]}`, () => assert.equal(toWkt(parseWkt(wkt)), wkt));
 
 test('drops floating point noise', () => assert.equal(toWkt({ type: 'Point', coordinates: [139.76710000000001, -0.1 - 0.2] }), 'POINT (139.7671 -0.3)'));
-test('imageViewerUrl encodes the WKT', () => {
-  assert.equal(imageViewerUrl({ type: 'Point', coordinates: [139.7671, 35.6812] }), 'web+imageviewer:geom=POINT%20(139.7671%2035.6812)');
-});

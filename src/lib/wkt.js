@@ -158,6 +158,3 @@ export function toWkt(g) {
       throw new Error(`unknown geometry type: ${g.type}`);
   }
 }
-
-/** 画像ビューアアプリ（web+imageviewer プロトコル）でジオメトリを開く URL。 */
-export const imageViewerUrl = (geometry) => `web+imageviewer:geom=${encodeURIComponent(toWkt(geometry))}`;

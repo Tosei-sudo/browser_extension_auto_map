@@ -42,5 +42,9 @@
     "pageSize": 1000,
     "maxFeatures": 100000
   },
-  "gazetteerServices": []
+  "gazetteerServices": [],
+  "mikage": {
+    "enabled": true,
+    "url": "http://127.0.0.1:47631"
+  }
 }

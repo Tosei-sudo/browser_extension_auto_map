@@ -41,9 +41,14 @@
     .label { position: fixed; z-index: 5; pointer-events: none; background: rgba(31,35,40,.9); color: #fff; font-size: 12px;
              padding: 3px 8px; border-radius: 6px; max-width: 320px; word-break: break-all; }
     .links { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
-    .links a { font-size: 12px; padding: 3px 9px; border-radius: 6px; border: 1px solid #d0d7de; background: #fff; color: #0969da; text-decoration: none; }
-    .links a:hover { background: #f3f4f6; }
-    .links a[hidden] { display: none; }
+    .links button { font: inherit; font-size: 12px; padding: 3px 9px; border-radius: 6px; border: 1px solid #d0d7de; background: #fff; color: #0969da; cursor: pointer; }
+    .links button:hover:not(:disabled) { background: #f3f4f6; }
+    .links button:disabled { opacity: .5; cursor: default; }
+    .links button[hidden] { display: none; }
+    .sent { margin-top: 6px; font-size: 12px; color: #57606a; word-break: break-all; }
+    .sent.ok { color: #1a7f37; }
+    .sent.warn { color: #9a6700; }
+    .sent.err { color: #b42318; }
   </style>
 </head>
 <body>
@@ -53,9 +58,10 @@
     <div class="kind" id="kind"></div>
     <dl id="info"></dl>
     <div class="links">
-      <a id="viewer" target="_blank" rel="noopener" hidden>画像ビューアで開く</a>
-      <a id="viewerAll" target="_blank" rel="noopener" hidden>すべてを画像ビューアで開く</a>
+      <button id="sendOne" type="button" hidden>MIKAGE に送る</button>
+      <button id="sendAll" type="button" hidden>すべてを MIKAGE に送る</button>
     </div>
+    <div class="sent" id="sent" hidden></div>
     <ul class="items" id="items" hidden></ul>
   </div>
   <div class="controls">

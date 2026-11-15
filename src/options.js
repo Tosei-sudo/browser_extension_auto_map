@@ -41,6 +41,11 @@ const LABELS = {
     splitPairs: '緯度と経度が別々の要素にあるものも組にする',
     pairMaxGap: '上記で組にする最大の間隔（文字数）',
   },
+  mikage: {
+    _: 'MIKAGE（QGIS）に送る',
+    enabled: '「MIKAGE に送る」を出す（サイドパネル・地図タブ・Shift+クリック）',
+    url: '送信先（http://127.0.0.1:ポート。MIKAGE の shapeReceiver.port と合わせる）',
+  },
   gazetteer: {
     _: '地名（ArcGIS フィーチャーサービス）',
     enabled: '地名を検出する',
